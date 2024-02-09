@@ -7,8 +7,6 @@ This package implements the [libdns interfaces](https://github.com/libdns/libdns
 
 It is based on the [libdns/hetzner](https://github.com/libdns/hetzner) package.
 
-Maintained by [Rewilok](https://www.rewilok.com) people.
-
 ## Authenticating
 
 To authenticate you need to supply a Bunny.net [API Key](https://dash.bunny.net/account/settings).
