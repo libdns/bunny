@@ -133,7 +133,7 @@ func Test_AppendRecords(t *testing.T) {
 			defer cleanupRecords(t, p, result)
 
 			if len(result) != len(c.records) {
-				t.Fatalf("len(resilt) != len(c.records) => %d != %d", len(c.records), len(result))
+				t.Fatalf("len(result) != len(c.records) => %d != %d", len(c.records), len(result))
 			}
 
 			for k, r := range result {
