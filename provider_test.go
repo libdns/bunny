@@ -76,6 +76,7 @@ Example: "BUNNY_TEST_API_KEY="123" BUNNY_TEST_ZONE="my-domain.com" go test ./...
 func Test_AppendRecords(t *testing.T) {
 	p := &bunny.Provider{
 		AccessKey: envAccessKey,
+		Debug:     true,
 	}
 
 	testCases := []struct {
@@ -122,6 +123,15 @@ func Test_AppendRecords(t *testing.T) {
 				{Type: "TXT", Name: "123.test", Value: "test", TTL: ttl},
 			},
 		},
+		{
+			// wildcard record
+			records: []libdns.Record{
+				{Type: "TXT", Name: "*.123.test", Value: "123", TTL: ttl},
+			},
+			expected: []libdns.Record{
+				{Type: "TXT", Name: "*.123.test", Value: "123", TTL: ttl},
+			},
+		},
 	}
 
 	for _, c := range testCases {
@@ -141,16 +151,16 @@ func Test_AppendRecords(t *testing.T) {
 					t.Fatalf("len(result[%d].ID) == 0", k)
 				}
 				if r.Type != c.expected[k].Type {
-					t.Fatalf("r.Type != c.exptected[%d].Type => %s != %s", k, r.Type, c.expected[k].Type)
+					t.Fatalf("r.Type != c.expected[%d].Type => %s != %s", k, r.Type, c.expected[k].Type)
 				}
 				if r.Name != c.expected[k].Name {
-					t.Fatalf("r.Name != c.exptected[%d].Name => %s != %s", k, r.Name, c.expected[k].Name)
+					t.Fatalf("r.Name != c.expected[%d].Name => %s != %s", k, r.Name, c.expected[k].Name)
 				}
 				if r.Value != c.expected[k].Value {
-					t.Fatalf("r.Value != c.exptected[%d].Value => %s != %s", k, r.Value, c.expected[k].Value)
+					t.Fatalf("r.Value != c.expected[%d].Value => %s != %s", k, r.Value, c.expected[k].Value)
 				}
 				if r.TTL != c.expected[k].TTL {
-					t.Fatalf("r.TTL != c.exptected[%d].TTL => %s != %s", k, r.TTL, c.expected[k].TTL)
+					t.Fatalf("r.TTL != c.expected[%d].TTL => %s != %s", k, r.TTL, c.expected[k].TTL)
 				}
 			}
 		}()
@@ -160,6 +170,7 @@ func Test_AppendRecords(t *testing.T) {
 func Test_DeleteRecords(t *testing.T) {
 	p := &bunny.Provider{
 		AccessKey: envAccessKey,
+		Debug:     true,
 	}
 
 	testRecords, cleanupFunc := setupTestRecords(t, p)
@@ -191,6 +202,7 @@ func Test_DeleteRecords(t *testing.T) {
 func Test_GetRecords(t *testing.T) {
 	p := &bunny.Provider{
 		AccessKey: envAccessKey,
+		Debug:     true,
 	}
 
 	testRecords, cleanupFunc := setupTestRecords(t, p)
@@ -222,6 +234,7 @@ func Test_GetRecords(t *testing.T) {
 func Test_SetRecords(t *testing.T) {
 	p := &bunny.Provider{
 		AccessKey: envAccessKey,
+		Debug:     true,
 	}
 
 	existingRecords, _ := setupTestRecords(t, p)

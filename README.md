@@ -42,6 +42,7 @@ func main() {
 
 	provider := &bunny.Provider{
 		AccessKey: apiKey,
+		Debug: true // default: false
 	}
 
 	records, err := provider.GetRecords(context.WithTimeout(context.Background(), time.Duration(15*time.Second)), zone)
