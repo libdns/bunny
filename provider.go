@@ -10,8 +10,9 @@ import (
 // Provider facilitates DNS record manipulation with Bunny.net
 type Provider struct {
 	// AccessKey is the Bunny.net API key - see https://docs.bunny.net/reference/bunnynet-api-overview
-	AccessKey string `json:"access_key"`
-	Debug     bool   `json:"debug"`
+	AccessKey string       `json:"access_key"`
+	Debug     bool         `json:"debug"`
+	Logger    func(string) `json:"-"`
 }
 
 // GetRecords lists all the records in the zone.

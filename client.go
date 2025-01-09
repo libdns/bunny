@@ -63,9 +63,7 @@ func (p *Provider) getZoneID(ctx context.Context, zone string) (int, error) {
 		return 0, fmt.Errorf("zone is an empty string")
 	}
 
-	if p.Debug {
-		fmt.Printf("[bunny] getting zone ID for %s\n", zone)
-	}
+	p.debugLogf("getting zone ID for %s", zone)
 
 	// [page => 1] and [perPage => 5] are the smallest accepted values for the API
 	req, err := http.NewRequestWithContext(ctx, "GET",
@@ -88,9 +86,7 @@ func (p *Provider) getZoneID(ctx context.Context, zone string) (int, error) {
 	// need to find an exact match.
 	for _, candidate := range result.Zones {
 		if strings.EqualFold(candidate.Domain, zone) {
-			if p.Debug {
-				fmt.Printf("[bunny]   received: %d\n", candidate.ID)
-			}
+			p.debugLogf("got zone ID %d for %s", candidate.ID, zone)
 			return candidate.ID, nil
 		}
 	}
@@ -104,9 +100,7 @@ func (p *Provider) getAllRecords(ctx context.Context, zone string) ([]libdns.Rec
 		return nil, err
 	}
 
-	if p.Debug {
-		fmt.Printf("[bunny] getting all records in zone %d\n", zoneID)
-	}
+	p.debugLogf("getting all records in zone %d", zoneID)
 
 	req, err := http.NewRequestWithContext(ctx, "GET",
 		fmt.Sprintf("https://api.bunny.net/dnszone/%d", zoneID), nil)
@@ -135,17 +129,7 @@ func (p *Provider) getAllRecords(ctx context.Context, zone string) ([]libdns.Rec
 		})
 	}
 
-	if p.Debug {
-		if len(records) > 0 {
-			fmt.Printf("[bunny]   found %d records:\n", len(records))
-			for _, record := range records {
-				fmt.Printf("[bunny]   %s: Name=%s, Value=%s, TTL=%s, Priority=%d\n",
-					record.ID, record.Name, record.Value, record.TTL, record.Priority)
-			}
-		} else {
-			fmt.Println("[bunny]   found 0 records!")
-		}
-	}
+	p.debugLogf("got %d records in zone %d", len(records), zoneID)
 
 	return records, nil
 }
@@ -156,10 +140,8 @@ func (p *Provider) createRecord(ctx context.Context, zone string, record libdns.
 		return libdns.Record{}, err
 	}
 
-	if p.Debug {
-		fmt.Printf("[bunny] creating record in zone %d: Name=%s, Value=%s, TTL=%s, Priority=%d\n",
-			zoneID, record.Name, record.Value, record.TTL, record.Priority)
-	}
+	p.debugLogf("creating record in zone %d: Name=%s, Value=%s, TTL=%s, Priority=%d",
+		zoneID, record.Name, record.Value, record.TTL, record.Priority)
 
 	reqData := bunnyRecord{
 		Type:  toBunnyType(record.Type),
@@ -198,10 +180,8 @@ func (p *Provider) createRecord(ctx context.Context, zone string, record libdns.
 		TTL:   time.Duration(result.TTL) * time.Second,
 	}
 
-	if p.Debug {
-		fmt.Printf("[bunny]   created record %s: Name=%s, Value=%s, TTL=%s, Priority=%d\n",
-			resRecord.ID, resRecord.Name, resRecord.Value, resRecord.TTL, resRecord.Priority)
-	}
+	p.debugLogf("created record %s: Name=%s, Value=%s, TTL=%s, Priority=%d",
+		resRecord.ID, resRecord.Name, resRecord.Value, resRecord.TTL, resRecord.Priority)
 
 	return resRecord, nil
 }
@@ -212,10 +192,8 @@ func (p *Provider) deleteRecord(ctx context.Context, zone string, record libdns.
 		return err
 	}
 
-	if p.Debug {
-		fmt.Printf("[bunny] deleting record %s in zone %d: Name=%s, Value=%s, TTL=%s, Priority=%d\n",
-			record.ID, zoneID, record.Name, record.Value, record.TTL, record.Priority)
-	}
+	p.debugLogf("deleting record %s in zone %d: Name=%s, Value=%s",
+		record.ID, zoneID, record.Name, record.Value)
 
 	req, err := http.NewRequestWithContext(ctx, "DELETE",
 		fmt.Sprintf("https://api.bunny.net/dnszone/%d/records/%s", zoneID, url.PathEscape(record.ID)), nil)
@@ -237,10 +215,8 @@ func (p *Provider) updateRecord(ctx context.Context, zone string, record libdns.
 		return err
 	}
 
-	if p.Debug {
-		fmt.Printf("[bunny] updating record %s in %d: Name=%s, Value=%s, TTL=%s, Priority=%d\n",
-			record.ID, zoneID, record.Name, record.Value, record.TTL, record.Priority)
-	}
+	p.debugLogf("updating record %s in %d: Name=%s, Value=%s, TTL=%s, Priority=%d",
+		record.ID, zoneID, record.Name, record.Value, record.TTL, record.Priority)
 
 	reqData := bunnyRecord{
 		Type:  toBunnyType(record.Type),
@@ -284,6 +260,14 @@ func (p *Provider) createOrUpdateRecord(ctx context.Context, zone string, record
 
 	err := p.updateRecord(ctx, zone, record)
 	return record, err
+}
+
+func (p *Provider) debugLogf(msg string, a ...any) {
+	if p.Logger != nil {
+		p.Logger(fmt.Sprintf(msg, a...))
+	} else if p.Debug {
+		fmt.Printf("[bunny] %s\n", fmt.Sprintf(msg, a...))
+	}
 }
 
 const (
