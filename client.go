@@ -140,8 +140,8 @@ func (p *Provider) createRecord(ctx context.Context, zone string, record libdns.
 		return libdns.Record{}, err
 	}
 
-	p.debugLogf("creating record in zone %d: Name=%s, Value=%s, TTL=%s, Priority=%d",
-		zoneID, record.Name, record.Value, record.TTL, record.Priority)
+	p.debugLogf("creating %s record in zone %d: Name=%s, Value=%s, TTL=%s, Priority=%d",
+		record.Type, zoneID, record.Name, record.Value, record.TTL, record.Priority)
 
 	reqData := bunnyRecord{
 		Type:  toBunnyType(record.Type),
@@ -180,8 +180,8 @@ func (p *Provider) createRecord(ctx context.Context, zone string, record libdns.
 		TTL:   time.Duration(result.TTL) * time.Second,
 	}
 
-	p.debugLogf("created record %s: Name=%s, Value=%s, TTL=%s, Priority=%d",
-		resRecord.ID, resRecord.Name, resRecord.Value, resRecord.TTL, resRecord.Priority)
+	p.debugLogf("created %s record with ID %s: Name=%s, Value=%s, TTL=%s, Priority=%d",
+		resRecord.Type, resRecord.ID, resRecord.Name, resRecord.Value, resRecord.TTL, resRecord.Priority)
 
 	return resRecord, nil
 }
@@ -192,8 +192,8 @@ func (p *Provider) deleteRecord(ctx context.Context, zone string, record libdns.
 		return err
 	}
 
-	p.debugLogf("deleting record %s in zone %d: Name=%s, Value=%s",
-		record.ID, zoneID, record.Name, record.Value)
+	p.debugLogf("deleting %s record %s in zone %d: Name=%s, Value=%s",
+		record.Type, record.ID, zoneID, record.Name, record.Value)
 
 	req, err := http.NewRequestWithContext(ctx, "DELETE",
 		fmt.Sprintf("https://api.bunny.net/dnszone/%d/records/%s", zoneID, url.PathEscape(record.ID)), nil)
@@ -215,8 +215,8 @@ func (p *Provider) updateRecord(ctx context.Context, zone string, record libdns.
 		return err
 	}
 
-	p.debugLogf("updating record %s in %d: Name=%s, Value=%s, TTL=%s, Priority=%d",
-		record.ID, zoneID, record.Name, record.Value, record.TTL, record.Priority)
+	p.debugLogf("updating %s record %s in zone %d: Name=%s, Value=%s, TTL=%s, Priority=%d",
+		record.Type, record.ID, zoneID, record.Name, record.Value, record.TTL, record.Priority)
 
 	reqData := bunnyRecord{
 		Type:  toBunnyType(record.Type),
