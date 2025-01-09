@@ -1,11 +1,8 @@
-Bunny.net DNS for [`libdns`](https://github.com/libdns/libdns)
-=======================
+# Bunny.net DNS for [`libdns`](https://github.com/libdns/libdns)
 
 [![Go Reference](https://pkg.go.dev/badge/test.svg)](https://pkg.go.dev/github.com/libdns/bunny)
 
 This package implements the [libdns interfaces](https://github.com/libdns/libdns) for [Bunny.net](https://docs.bunny.net/reference/bunnynet-api-overview), allowing you to manage DNS records.
-
-It is based on the [libdns/hetzner](https://github.com/libdns/hetzner) package.
 
 ## Authenticating
 
@@ -42,7 +39,6 @@ func main() {
 
 	provider := &bunny.Provider{
 		AccessKey: apiKey,
-		Debug: true // default: false
 	}
 
 	records, err := provider.GetRecords(context.WithTimeout(context.Background(), time.Duration(15*time.Second)), zone)
@@ -54,4 +50,33 @@ func main() {
 	fmt.Println(records)
 }
 
+```
+
+## Debugging
+
+You can enable logging by configuring an external logger or by setting `Debug` to true.
+
+```go
+	...
+
+	// Use an external logger
+	provider := &bunny.Provider{
+		AccessKey: apiKey,
+		Logger: func(msg string) {
+			fmt.Printf("Info: %s\n", msg)
+		}
+	}
+
+	// Use the internal logger
+	provider := &bunny.Provider{
+		AccessKey: apiKey,
+		Debug: true
+	}
+```
+Example output using the internal logger:
+
+```shell
+[bunny] getting zone ID for example.com
+[bunny] got zone ID 82940 for example.com
+[bunny] deleting record 7640618 in zone 82940: Name=test3, Value=test3
 ```
