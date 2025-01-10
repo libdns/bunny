@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/libdns/libdns"
+	"golang.org/x/net/publicsuffix"
 )
 
 type getAllRecordsResponse struct {
@@ -94,8 +95,20 @@ func (p *Provider) getZoneID(ctx context.Context, zone string) (int, error) {
 	return 0, fmt.Errorf("zone not found: %s", zone)
 }
 
-func (p *Provider) getAllRecords(ctx context.Context, zone string) ([]libdns.Record, error) {
-	p.log(fmt.Sprintf("fetching all records in zone %s", zone))
+func (p *Provider) getAllRecords(ctx context.Context, domain string) ([]libdns.Record, error) {
+	p.log(fmt.Sprintf("fetching all records for %s", domain))
+
+	domain = strings.ToLower(domain)
+	zone, err := publicsuffix.EffectiveTLDPlusOne(domain)
+	if err != nil {
+		zone = domain
+	}
+
+	suffix := "." + zone
+	var subdomain string
+	if strings.HasSuffix(domain, suffix) {
+		subdomain = strings.TrimSuffix(domain, suffix)
+	}
 
 	zoneID, err := p.getZoneID(ctx, zone)
 	if err != nil {
@@ -120,6 +133,10 @@ func (p *Provider) getAllRecords(ctx context.Context, zone string) ([]libdns.Rec
 
 	records := []libdns.Record{}
 	for _, resData := range result.Records {
+		// in case of a subdomain, we need to filter the records by name
+		if subdomain != "" && !strings.EqualFold(resData.Name, subdomain) {
+			continue
+		}
 		records = append(records, libdns.Record{
 			ID:    fmt.Sprint(resData.ID),
 			Type:  fromBunnyType(resData.Type),

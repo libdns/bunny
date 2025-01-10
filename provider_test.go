@@ -231,6 +231,31 @@ func Test_GetRecords(t *testing.T) {
 	}
 }
 
+func Test_GetRecordsFiltered(t *testing.T) {
+	p := &bunny.Provider{
+		AccessKey: envAccessKey,
+		Debug:     true,
+	}
+
+	testRecords, cleanupFunc := setupTestRecords(t, p)
+	defer cleanupFunc()
+
+	for _, testRecord := range testRecords {
+		records, err := p.GetRecords(context.TODO(), fmt.Sprintf("%s.%s", testRecord.Name, envZone))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if len(records) > 1 {
+			t.Fatalf("len(records) > 1 => %d", len(records))
+		}
+
+		if len(records) < 1 || records[0].ID != testRecord.ID {
+			t.Fatalf("Record not found => %s", testRecord.ID)
+		}
+	}
+}
+
 func Test_SetRecords(t *testing.T) {
 	p := &bunny.Provider{
 		AccessKey: envAccessKey,
