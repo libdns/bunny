@@ -54,29 +54,35 @@ func main() {
 
 ## Debugging
 
-You can enable logging by configuring an external logger or by setting `Debug` to true.
+You can enable logging by configuring a custom logger or by setting `Debug` to true.
 
 ```go
 	...
 
-	// Use an external logger
+	// Use a custom logger
 	provider := &bunny.Provider{
 		AccessKey: apiKey,
-		Logger: func(msg string) {
-			fmt.Printf("Info: %s\n", msg)
+		Logger: func(msg string, records []libdns.Record) {
+			fmt.Printf("[bunny]: %s\n", msg)
 		}
 	}
 
-	// Use the internal logger
+	// Use the default logger
 	provider := &bunny.Provider{
 		AccessKey: apiKey,
 		Debug: true
 	}
 ```
-Example output using the internal logger:
+Example output using the default logger:
 
 ```shell
-[bunny] getting zone ID for example.com
-[bunny] got zone ID 82940 for example.com
-[bunny] deleting record 7640618 in zone 82940: Name=test3, Value=test3
+[bunny] fetching all records for example.com
+[bunny] fetching zone ID for example.com
+[bunny] done fetching zone ID 82940 for example.com
+[bunny] done fetching 3 record(s) in zone example.com
+[bunny]   TXT: ID=7648777, TTL=2m0s, Priority=0, Name=test1, Value=test1
+[bunny]   TXT: ID=7648778, TTL=2m0s, Priority=0, Name=test2, Value=test2
+[bunny]   TXT: ID=7648779, TTL=2m0s, Priority=0, Name=test3, Value=test3
+[bunny] deleting TXT record in zone example.com
+[bunny]   TXT: ID=7648777, TTL=2m0s, Priority=0, Name=test1, Value=test1
 ```
