@@ -258,7 +258,7 @@ func (p *Provider) createOrUpdateRecord(ctx context.Context, zone string, record
 
 func (p *Provider) log(msg string, records ...libdns.Record) {
 	if p.Logger != nil {
-		p.Logger(msg, records...)
+		p.Logger(msg, records)
 	} else if p.Debug {
 		fmt.Printf("[bunny] %s\n", msg)
 		for _, record := range records {
