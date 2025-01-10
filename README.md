@@ -59,7 +59,7 @@ You can enable logging by configuring a custom logger or by setting `Debug` to t
 ```go
 	...
 
-	// Use a custom logger
+	// Logging is always enabled when using a custom logger
 	provider := &bunny.Provider{
 		AccessKey: apiKey,
 		Logger: func(msg string, records []libdns.Record) {
@@ -67,7 +67,7 @@ You can enable logging by configuring a custom logger or by setting `Debug` to t
 		}
 	}
 
-	// Use the default logger
+	// Enable the default logger
 	provider := &bunny.Provider{
 		AccessKey: apiKey,
 		Debug: true
