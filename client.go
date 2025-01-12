@@ -133,9 +133,12 @@ func (p *Provider) getAllRecords(ctx context.Context, domain string) ([]libdns.R
 
 	records := []libdns.Record{}
 	for _, resData := range result.Records {
-		// in case of a subdomain, we need to filter the records by name
-		if subdomain != "" && !strings.EqualFold(resData.Name, subdomain) {
-			continue
+		if subdomain != "" {
+			resName := strings.ToLower(resData.Name)
+			// in case of a subdomain, we need to filter the records by name
+			if resName != subdomain && !strings.HasSuffix(resName, "."+subdomain) {
+				continue
+			}
 		}
 		records = append(records, libdns.Record{
 			ID:    fmt.Sprint(resData.ID),
