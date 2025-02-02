@@ -59,16 +59,18 @@ func (p *Provider) doRequest(request *http.Request) ([]byte, error) {
 	return data, nil
 }
 
-func (p *Provider) getZoneID(ctx context.Context, zone string) (int, error) {
-	if zone == "" {
-		return 0, fmt.Errorf("zone is an empty string")
+func (p *Provider) getZoneID(ctx context.Context, domain string) (int, error) {
+	if domain == "" {
+		return 0, fmt.Errorf("domain is an empty string")
 	}
 
-	p.log(fmt.Sprintf("fetching zone ID for %s", zone))
+	p.log(fmt.Sprintf("fetching zone ID for %s", domain))
 
-	// [page => 1] and [perPage => 5] are the smallest accepted values for the API
+	// Get all possible parent domains to check
+	zoneGuesses := getBaseDomainNameGuesses(domain)
+
 	req, err := http.NewRequestWithContext(ctx, "GET",
-		fmt.Sprintf("https://api.bunny.net/dnszone?page=1&perPage=5&search=%s", url.QueryEscape(zone)), nil)
+		"https://api.bunny.net/dnszone", nil)
 	if err != nil {
 		return 0, err
 	}
@@ -83,16 +85,37 @@ func (p *Provider) getZoneID(ctx context.Context, zone string) (int, error) {
 		return 0, err
 	}
 
-	// The API may return more than one zone with a similar name, so we will
-	// need to find an exact match.
-	for _, candidate := range result.Zones {
-		if strings.EqualFold(candidate.Domain, zone) {
-			p.log(fmt.Sprintf("done fetching zone ID %d for %s", candidate.ID, zone))
-			return candidate.ID, nil
+	// Iterate through domain guesses (most specific to least specific)
+	for _, zoneGuess := range zoneGuesses {
+		for _, zone := range result.Zones {
+			if strings.EqualFold(zone.Domain, zoneGuess) {
+				p.log(fmt.Sprintf("found zone ID %d for %s using name %s",
+					zone.ID, domain, zone.Domain))
+				return zone.ID, nil
+			}
 		}
 	}
 
-	return 0, fmt.Errorf("zone not found: %s", zone)
+	return 0, fmt.Errorf("zone not found for domain: %s", domain)
+}
+
+// getBaseDomainNameGuesses returns a slice of possible parent domain names ordered
+// from most specific to least specific. For a domain "sub.example.com", it returns
+// ["sub.example.com", "example.com", "com"]. If the input domain has fewer than
+// 2 parts (no dots or just one dot), it returns a slice containing only the input
+// domain.
+func getBaseDomainNameGuesses(domain string) []string {
+	parts := strings.Split(domain, ".")
+	if len(parts) < 2 {
+		return []string{domain}
+	}
+
+	var guesses []string
+	for i := 0; i < len(parts)-1; i++ {
+		guess := strings.Join(parts[i:], ".")
+		guesses = append(guesses, guess)
+	}
+	return guesses
 }
 
 func (p *Provider) getAllRecords(ctx context.Context, domain string) ([]libdns.Record, error) {
