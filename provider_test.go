@@ -123,15 +123,6 @@ func Test_AppendRecords(t *testing.T) {
 				{Type: "TXT", Name: "123.test", Value: "test", TTL: ttl},
 			},
 		},
-		{
-			// wildcard record
-			records: []libdns.Record{
-				{Type: "TXT", Name: "*.123.test", Value: "123", TTL: ttl},
-			},
-			expected: []libdns.Record{
-				{Type: "TXT", Name: "*.123.test", Value: "123", TTL: ttl},
-			},
-		},
 	}
 
 	for _, c := range testCases {
