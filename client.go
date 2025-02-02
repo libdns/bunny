@@ -99,11 +99,11 @@ func (p *Provider) getZoneID(ctx context.Context, domain string) (int, error) {
 	return 0, fmt.Errorf("zone not found for domain: %s", domain)
 }
 
-// getBaseDomainNameGuesses returns a slice of possible parent domain names ordered
-// from most specific to least specific. For a domain "sub.example.com", it returns
-// ["sub.example.com", "example.com", "com"]. If the input domain has fewer than
-// 2 parts (no dots or just one dot), it returns a slice containing only the input
-// domain.
+// getBaseDomainNameGuesses returns a slice of possible parent domain names
+// ordered from most specific to least specific. For a domain "sub.example.com",
+// it returns ["sub.example.com", "example.com", "com"]. If the input domain has
+// fewer than 2 parts (no dots or just one dot), it returns a slice containing
+// only the input domain.
 func getBaseDomainNameGuesses(domain string) []string {
 	parts := strings.Split(domain, ".")
 	if len(parts) < 2 {
