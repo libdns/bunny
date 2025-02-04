@@ -67,7 +67,7 @@ func (p *Provider) getZone(ctx context.Context, domain string) (bunnyZone, error
 
 	p.log(fmt.Sprintf("fetching zone for %s", domain))
 
-	zone, err := publicsuffix.EffectiveTLDPlusOne(strings.ToLower(domain))
+	zone, err := publicsuffix.EffectiveTLDPlusOne(domain)
 	if err != nil {
 		zone = domain
 	}
@@ -228,7 +228,7 @@ func (p *Provider) createRecord(ctx context.Context, domain string, record libdn
 }
 
 func (p *Provider) updateRecord(ctx context.Context, domain string, record libdns.Record) error {
-	p.log(fmt.Sprintf("updating %s record in %s", record.Type, domain), record)
+	p.log(fmt.Sprintf("updating %s record in zone %s", record.Type, domain), record)
 
 	zone, err := p.getZone(ctx, domain)
 	if err != nil {
