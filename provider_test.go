@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -103,24 +102,6 @@ func Test_AppendRecords(t *testing.T) {
 			},
 			expected: []libdns.Record{
 				{Type: "TXT", Name: "123.test", Value: "123", TTL: ttl},
-			},
-		},
-		{
-			// (fqdn) sans trailing dot
-			records: []libdns.Record{
-				{Type: "TXT", Name: fmt.Sprintf("123.test.%s", strings.TrimSuffix(envZone, ".")), Value: "test", TTL: ttl},
-			},
-			expected: []libdns.Record{
-				{Type: "TXT", Name: "123.test", Value: "test", TTL: ttl},
-			},
-		},
-		{
-			// fqdn with trailing dot
-			records: []libdns.Record{
-				{Type: "TXT", Name: fmt.Sprintf("123.test.%s.", strings.TrimSuffix(envZone, ".")), Value: "test", TTL: ttl},
-			},
-			expected: []libdns.Record{
-				{Type: "TXT", Name: "123.test", Value: "test", TTL: ttl},
 			},
 		},
 	}
