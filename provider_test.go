@@ -282,14 +282,14 @@ func Test_NestedRecords(t *testing.T) {
 		},
 	}
 
-	records, err := p.SetRecords(context.TODO(), fmt.Sprintf("subdomain.%s", envZone), testRecords)
+	_, err := p.SetRecords(context.TODO(), fmt.Sprintf("subdomain.%s", envZone), testRecords)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Check that records created on a "subdomain" are correctly suffixed.
 
-	records, err = p.GetRecords(context.TODO(), envZone)
+	records, err := p.GetRecords(context.TODO(), envZone)
 	if err != nil {
 		t.Fatal(err)
 	}

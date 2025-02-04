@@ -91,7 +91,6 @@ func (p *Provider) getZone(ctx context.Context, domain string) (bunnyZone, error
 			if strings.EqualFold(zone.Domain, zoneGuess) {
 				if len(domain) > len(zone.Domain) {
 					zone.Name = domain[:len(domain)-len(zone.Domain)-1]
-
 					p.log(fmt.Sprintf("found zone ID %d (%s) for %s",
 						zone.ID, zone.Domain, domain))
 				} else {
