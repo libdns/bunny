@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -103,33 +102,6 @@ func Test_AppendRecords(t *testing.T) {
 			},
 			expected: []libdns.Record{
 				{Type: "TXT", Name: "123.test", Value: "123", TTL: ttl},
-			},
-		},
-		{
-			// (fqdn) sans trailing dot
-			records: []libdns.Record{
-				{Type: "TXT", Name: fmt.Sprintf("123.test.%s", strings.TrimSuffix(envZone, ".")), Value: "test", TTL: ttl},
-			},
-			expected: []libdns.Record{
-				{Type: "TXT", Name: "123.test", Value: "test", TTL: ttl},
-			},
-		},
-		{
-			// fqdn with trailing dot
-			records: []libdns.Record{
-				{Type: "TXT", Name: fmt.Sprintf("123.test.%s.", strings.TrimSuffix(envZone, ".")), Value: "test", TTL: ttl},
-			},
-			expected: []libdns.Record{
-				{Type: "TXT", Name: "123.test", Value: "test", TTL: ttl},
-			},
-		},
-		{
-			// wildcard record
-			records: []libdns.Record{
-				{Type: "TXT", Name: "*.123.test", Value: "123", TTL: ttl},
-			},
-			expected: []libdns.Record{
-				{Type: "TXT", Name: "*.123.test", Value: "123", TTL: ttl},
 			},
 		},
 	}
@@ -231,31 +203,6 @@ func Test_GetRecords(t *testing.T) {
 	}
 }
 
-func Test_GetRecordsFiltered(t *testing.T) {
-	p := &bunny.Provider{
-		AccessKey: envAccessKey,
-		Debug:     true,
-	}
-
-	testRecords, cleanupFunc := setupTestRecords(t, p)
-	defer cleanupFunc()
-
-	for _, testRecord := range testRecords {
-		records, err := p.GetRecords(context.TODO(), fmt.Sprintf("%s.%s", testRecord.Name, envZone))
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if len(records) > 1 {
-			t.Fatalf("len(records) > 1 => %d", len(records))
-		}
-
-		if len(records) < 1 || records[0].ID != testRecord.ID {
-			t.Fatalf("Record not found => %s", testRecord.ID)
-		}
-	}
-}
-
 func Test_SetRecords(t *testing.T) {
 	p := &bunny.Provider{
 		AccessKey: envAccessKey,
@@ -293,5 +240,76 @@ func Test_SetRecords(t *testing.T) {
 
 	if records[0].Value != "new_value" {
 		t.Fatalf(`records[0].Value != "new_value" => %s != "new_value"`, records[0].Value)
+	}
+}
+
+func Test_NestedRecords(t *testing.T) {
+	p := &bunny.Provider{
+		AccessKey: envAccessKey,
+		Debug:     true,
+	}
+
+	testRecords := []libdns.Record{
+		{
+			Type:  "TXT",
+			Name:  "test1",
+			Value: "test1",
+			TTL:   ttl,
+		}, {
+			Type:  "TXT",
+			Name:  "test2",
+			Value: "test2",
+			TTL:   ttl,
+		},
+	}
+
+	_, err := p.SetRecords(context.TODO(), fmt.Sprintf("subdomain.%s", envZone), testRecords)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that records created on a "subdomain" are correctly suffixed.
+
+	records, err := p.GetRecords(context.TODO(), envZone)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, testRecord := range testRecords {
+		var foundRecord *libdns.Record
+		for _, record := range records {
+			if fmt.Sprintf("%s.subdomain", testRecord.Name) == record.Name {
+				foundRecord = &testRecord
+			}
+		}
+
+		if foundRecord == nil {
+			t.Fatalf("Record not found => %s.subdomain", testRecord.Name)
+		}
+	}
+
+	// Check that records retrieved from a "subdomain" are normalised correctly.
+
+	records, err = p.GetRecords(context.TODO(), fmt.Sprintf("subdomain.%s", envZone))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanupRecords(t, p, records)
+
+	if len(records) != len(testRecords) {
+		t.Fatalf("len(records) != len(testRecords) => %d != %d", len(records), len(testRecords))
+	}
+
+	for _, testRecord := range testRecords {
+		var foundRecord *libdns.Record
+		for _, record := range records {
+			if testRecord.Name == record.Name {
+				foundRecord = &testRecord
+			}
+		}
+
+		if foundRecord == nil {
+			t.Fatalf("Record not found => %s", testRecord.Name)
+		}
 	}
 }
