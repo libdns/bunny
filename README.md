@@ -32,7 +32,7 @@ func main() {
 	}
 
 	zone := os.Getenv("BUNNY_ZONE")
-	if token == "" {
+	if zone == "" {
 		fmt.Printf("BUNNY_ZONE not set\n")
 		return
 	}
