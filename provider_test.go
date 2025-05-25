@@ -252,12 +252,12 @@ func Test_SetRecords(t *testing.T) {
 	}
 
 	updatedRecords := []libdns.Record{
-		libdns.TXT{
+		libdns.TXT{ // Update existing record
 			Name: "test_3",
 			Text: "test_value_3_new",
 			TTL:  ttl,
 		},
-		libdns.TXT{
+		libdns.TXT{ // Add new record
 			Name: "test_4",
 			Text: "test_value_4",
 			TTL:  ttl,
@@ -297,6 +297,10 @@ func Test_SetRecords(t *testing.T) {
 		if !contains_ {
 			t.Fatalf("record %v does not exist on nameserver", updatedRecord)
 		}
+	}
+
+	if len(records) != len(testRecords)+1 {
+		t.Fatalf("len(records) != len(testRecords) + 1 => %d != %d", len(records), len(testRecords)+1)
 	}
 }
 
