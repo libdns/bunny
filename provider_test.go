@@ -15,43 +15,87 @@ var (
 	envAccessKey = ""
 	envZone      = ""
 	ttl          = time.Duration(120 * time.Second)
-)
-
-type testRecordsCleanup = func()
-
-func setupTestRecords(t *testing.T, p *bunny.Provider) ([]libdns.Record, testRecordsCleanup) {
-	testRecords := []libdns.Record{
-		{
-			Type:  "TXT",
-			Name:  "test1",
-			Value: "test1",
+	testRecords  = []libdns.Record{
+		libdns.TXT{
+			Name: "test_1",
+			TTL:  ttl,
+			Text: "test_value_1",
+		},
+		libdns.TXT{
+			Name: "test_2",
+			TTL:  ttl,
+			Text: "test_value_2",
+		},
+		libdns.TXT{
+			Name: "test_3",
+			TTL:  ttl,
+			Text: "test_value_3",
+		},
+		libdns.CAA{
+			Name:  "test_4",
 			TTL:   ttl,
-		}, {
-			Type:  "TXT",
-			Name:  "test2",
-			Value: "test2",
-			TTL:   ttl,
-		}, {
-			Type:  "TXT",
-			Name:  "test3",
-			Value: "test3",
-			TTL:   ttl,
+			Flags: 12,
+			Tag:   "test",
+			Value: "test_value_4",
+		},
+		libdns.MX{
+			Name:       "test_5",
+			TTL:        ttl,
+			Preference: 10,
+			Target:     "mx.example.com",
+		},
+		libdns.SRV{
+			Service:   "sip",
+			Transport: "tcp",
+			Name:      "test_5",
+			TTL:       ttl,
+			Priority:  0,
+			Weight:    5,
+			Port:      5060,
+			Target:    "sipserver.example.com",
 		},
 	}
+)
 
-	records, err := p.AppendRecords(context.TODO(), envZone, testRecords)
-	if err != nil {
-		t.Fatal(err)
-		return nil, func() {}
+type testRecordsCleanup = func(testRecords []libdns.Record)
+
+func find[T any](elements []T, predicate func(T) bool) (T, bool) {
+	for _, element := range elements {
+		if predicate(element) {
+			return element, true
+		}
 	}
 
-	return records, func() {
-		cleanupRecords(t, p, records)
+	return *new(T), false
+}
+
+func contains[T any](elements []T, predicate func(T) bool) bool {
+	_, ok := find(elements, predicate)
+
+	return ok
+}
+
+func compareRecords(lhs libdns.Record, rhs libdns.Record) bool {
+	return lhs.RR().Type == rhs.RR().Type &&
+		lhs.RR().Name == rhs.RR().Name &&
+		lhs.RR().Data == rhs.RR().Data &&
+		lhs.RR().TTL == rhs.RR().TTL
+}
+
+func setupTestRecords(t *testing.T, p *bunny.Provider) ([]libdns.Record, testRecordsCleanup) {
+	records, err := p.AppendRecords(context.Background(), envZone, testRecords)
+	if err != nil {
+		t.Fatal(err)
+		return nil, func([]libdns.Record) {}
+	}
+
+	return records, func(testRecords []libdns.Record) {
+		cleanupRecords(t, p, append(records, testRecords...))
 	}
 }
 
 func cleanupRecords(t *testing.T, p *bunny.Provider, r []libdns.Record) {
-	_, err := p.DeleteRecords(context.TODO(), envZone, r)
+	_, err := p.DeleteRecords(context.Background(), envZone, r)
 	if err != nil {
 		t.Fatalf("cleanup failed: %v", err)
 	}
@@ -78,64 +122,47 @@ func Test_AppendRecords(t *testing.T) {
 		Debug:     true,
 	}
 
-	testCases := []struct {
-		records  []libdns.Record
-		expected []libdns.Record
-	}{
-		{
-			// multiple records
-			records: []libdns.Record{
-				{Type: "TXT", Name: "test_1", Value: "test_1", TTL: ttl},
-				{Type: "TXT", Name: "test_2", Value: "test_2", TTL: ttl},
-				{Type: "TXT", Name: "test_3", Value: "test_3", TTL: ttl},
-			},
-			expected: []libdns.Record{
-				{Type: "TXT", Name: "test_1", Value: "test_1", TTL: ttl},
-				{Type: "TXT", Name: "test_2", Value: "test_2", TTL: ttl},
-				{Type: "TXT", Name: "test_3", Value: "test_3", TTL: ttl},
-			},
-		},
-		{
-			// relative name
-			records: []libdns.Record{
-				{Type: "TXT", Name: "123.test", Value: "123", TTL: ttl},
-			},
-			expected: []libdns.Record{
-				{Type: "TXT", Name: "123.test", Value: "123", TTL: ttl},
-			},
+	newRecords := []libdns.Record{
+		libdns.TXT{
+			Name: "test_4",
+			Text: "test_value_4",
+			TTL:  ttl,
 		},
 	}
 
-	for _, c := range testCases {
-		func() {
-			result, err := p.AppendRecords(context.TODO(), envZone+".", c.records)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer cleanupRecords(t, p, result)
+	_, cleanupFunc := setupTestRecords(t, p)
+	defer cleanupFunc(newRecords)
 
-			if len(result) != len(c.records) {
-				t.Fatalf("len(result) != len(c.records) => %d != %d", len(c.records), len(result))
-			}
+	records, err := p.AppendRecords(context.Background(), envZone+".", newRecords)
 
-			for k, r := range result {
-				if len(result[k].ID) == 0 {
-					t.Fatalf("len(result[%d].ID) == 0", k)
-				}
-				if r.Type != c.expected[k].Type {
-					t.Fatalf("r.Type != c.expected[%d].Type => %s != %s", k, r.Type, c.expected[k].Type)
-				}
-				if r.Name != c.expected[k].Name {
-					t.Fatalf("r.Name != c.expected[%d].Name => %s != %s", k, r.Name, c.expected[k].Name)
-				}
-				if r.Value != c.expected[k].Value {
-					t.Fatalf("r.Value != c.expected[%d].Value => %s != %s", k, r.Value, c.expected[k].Value)
-				}
-				if r.TTL != c.expected[k].TTL {
-					t.Fatalf("r.TTL != c.expected[%d].TTL => %s != %s", k, r.TTL, c.expected[k].TTL)
-				}
-			}
-		}()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, newRecord := range newRecords {
+		contains_ := contains(records, func(record libdns.Record) bool {
+			return compareRecords(record, newRecord)
+		})
+
+		if !contains_ {
+			t.Fatalf("result does not contain record %v", newRecord)
+		}
+	}
+
+	records, err = p.GetRecords(context.Background(), envZone+".")
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, newRecord := range newRecords {
+		contains_ := contains(records, func(record libdns.Record) bool {
+			return compareRecords(record, newRecord)
+		})
+
+		if !contains_ {
+			t.Fatalf("record %v does not exist in zone", newRecord)
+		}
 	}
 }
 
@@ -145,28 +172,46 @@ func Test_DeleteRecords(t *testing.T) {
 		Debug:     true,
 	}
 
-	testRecords, cleanupFunc := setupTestRecords(t, p)
-	defer cleanupFunc()
+	_, cleanupFunc := setupTestRecords(t, p)
+	defer cleanupFunc(nil)
 
-	records, err := p.GetRecords(context.TODO(), envZone)
+	deletedRecords := []libdns.Record{
+		libdns.TXT{
+			Name: "test_3",
+			Text: "test_value_3",
+			TTL:  ttl,
+		},
+	}
+
+	records, err := p.DeleteRecords(context.Background(), envZone, deletedRecords)
+
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if len(records) < len(testRecords) {
-		t.Fatalf("len(records) < len(testRecords) => %d < %d", len(records), len(testRecords))
+	for _, deletedRecord := range deletedRecords {
+		contains_ := contains(records, func(record libdns.Record) bool {
+			return compareRecords(record, deletedRecord)
+		})
+
+		if !contains_ {
+			t.Fatalf("result does not contain record %v", deletedRecord)
+		}
 	}
 
-	for _, testRecord := range testRecords {
-		var foundRecord *libdns.Record
-		for _, record := range records {
-			if testRecord.ID == record.ID {
-				foundRecord = &testRecord
-			}
-		}
+	records, err = p.GetRecords(context.Background(), envZone)
 
-		if foundRecord == nil {
-			t.Fatalf("Record not found => %s", testRecord.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, deletedRecord := range deletedRecords {
+		contains_ := contains(records, func(record libdns.Record) bool {
+			return compareRecords(record, deletedRecord)
+		})
+
+		if contains_ {
+			t.Fatalf("record %v is still present on nameserver", deletedRecord)
 		}
 	}
 }
@@ -178,9 +223,9 @@ func Test_GetRecords(t *testing.T) {
 	}
 
 	testRecords, cleanupFunc := setupTestRecords(t, p)
-	defer cleanupFunc()
+	defer cleanupFunc(nil)
 
-	records, err := p.GetRecords(context.TODO(), envZone)
+	records, err := p.GetRecords(context.Background(), envZone)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,15 +235,12 @@ func Test_GetRecords(t *testing.T) {
 	}
 
 	for _, testRecord := range testRecords {
-		var foundRecord *libdns.Record
-		for _, record := range records {
-			if testRecord.ID == record.ID {
-				foundRecord = &testRecord
-			}
-		}
+		foundRecord := contains(records, func(record libdns.Record) bool {
+			return compareRecords(record, testRecord)
+		})
 
-		if foundRecord == nil {
-			t.Fatalf("Record not found => %s", testRecord.ID)
+		if !foundRecord {
+			t.Fatalf("Record not found => %v", testRecord)
 		}
 	}
 }
@@ -209,37 +251,56 @@ func Test_SetRecords(t *testing.T) {
 		Debug:     true,
 	}
 
-	existingRecords, _ := setupTestRecords(t, p)
-	newTestRecords := []libdns.Record{
-		{
-			Type:  "TXT",
-			Name:  "new_test1",
-			Value: "new_test1",
-			TTL:   ttl,
+	updatedRecords := []libdns.Record{
+		libdns.TXT{ // Update existing record
+			Name: "test_3",
+			Text: "test_value_3_new",
+			TTL:  ttl,
 		},
-		{
-			Type:  "TXT",
-			Name:  "new_test2",
-			Value: "new_test2",
-			TTL:   ttl,
+		libdns.TXT{ // Add new record
+			Name: "test_4",
+			Text: "test_value_4",
+			TTL:  ttl,
 		},
 	}
 
-	allRecords := append(existingRecords, newTestRecords...)
-	allRecords[0].Value = "new_value"
+	_, cleanupFunc := setupTestRecords(t, p)
+	defer cleanupFunc(updatedRecords)
 
-	records, err := p.SetRecords(context.TODO(), envZone, allRecords)
+	records, err := p.SetRecords(context.Background(), envZone, updatedRecords)
+
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cleanupRecords(t, p, records)
 
-	if len(records) != len(allRecords) {
-		t.Fatalf("len(records) != len(allRecords) => %d != %d", len(records), len(allRecords))
+	for _, updatedRecord := range updatedRecords {
+		contains_ := contains(records, func(record libdns.Record) bool {
+			return compareRecords(record, updatedRecord)
+		})
+
+		if !contains_ {
+			t.Fatalf("result does not contain record %v", updatedRecord)
+		}
 	}
 
-	if records[0].Value != "new_value" {
-		t.Fatalf(`records[0].Value != "new_value" => %s != "new_value"`, records[0].Value)
+	records, err = p.GetRecords(context.Background(), envZone)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, updatedRecord := range updatedRecords {
+		contains_ := contains(records, func(record libdns.Record) bool {
+			return compareRecords(record, updatedRecord)
+		})
+
+		if !contains_ {
+			t.Fatalf("record %v does not exist on nameserver", updatedRecord)
+		}
+	}
+
+	if len(records) != len(testRecords)+1 {
+		t.Fatalf("len(records) != len(testRecords) + 1 => %d != %d", len(records), len(testRecords)+1)
 	}
 }
 
@@ -250,27 +311,39 @@ func Test_NestedRecords(t *testing.T) {
 	}
 
 	testRecords := []libdns.Record{
-		{
-			Type:  "TXT",
-			Name:  "test1",
-			Value: "test1",
-			TTL:   ttl,
-		}, {
-			Type:  "TXT",
-			Name:  "test2",
-			Value: "test2",
-			TTL:   ttl,
+		libdns.TXT{
+			Name: "test1",
+			Text: "test1",
+			TTL:  ttl,
+		},
+		libdns.TXT{
+			Name: "test2",
+			Text: "test2",
+			TTL:  ttl,
 		},
 	}
 
-	_, err := p.SetRecords(context.TODO(), fmt.Sprintf("subdomain.%s", envZone), testRecords)
+	_, err := p.SetRecords(context.Background(), fmt.Sprintf("subdomain.%s", envZone), testRecords)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	defer cleanupRecords(t, p, []libdns.Record{
+		libdns.TXT{
+			Name: "test1.subdomain",
+			Text: "test1",
+			TTL:  ttl,
+		},
+		libdns.TXT{
+			Name: "test2.subdomain",
+			Text: "test2",
+			TTL:  ttl,
+		},
+	})
+
 	// Check that records created on a "subdomain" are correctly suffixed.
 
-	records, err := p.GetRecords(context.TODO(), envZone)
+	records, err := p.GetRecords(context.Background(), envZone)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,23 +351,23 @@ func Test_NestedRecords(t *testing.T) {
 	for _, testRecord := range testRecords {
 		var foundRecord *libdns.Record
 		for _, record := range records {
-			if fmt.Sprintf("%s.subdomain", testRecord.Name) == record.Name {
+			if fmt.Sprintf("%s.subdomain", testRecord.RR().Name) == record.RR().Name {
 				foundRecord = &testRecord
 			}
 		}
 
 		if foundRecord == nil {
-			t.Fatalf("Record not found => %s.subdomain", testRecord.Name)
+			t.Fatalf("Record not found => %s.subdomain", testRecord.RR().Name)
 		}
 	}
 
 	// Check that records retrieved from a "subdomain" are normalised correctly.
 
-	records, err = p.GetRecords(context.TODO(), fmt.Sprintf("subdomain.%s", envZone))
+	records, err = p.GetRecords(context.Background(), fmt.Sprintf("subdomain.%s", envZone))
+
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cleanupRecords(t, p, records)
 
 	if len(records) != len(testRecords) {
 		t.Fatalf("len(records) != len(testRecords) => %d != %d", len(records), len(testRecords))
@@ -303,13 +376,13 @@ func Test_NestedRecords(t *testing.T) {
 	for _, testRecord := range testRecords {
 		var foundRecord *libdns.Record
 		for _, record := range records {
-			if testRecord.Name == record.Name {
+			if testRecord.RR().Name == record.RR().Name {
 				foundRecord = &testRecord
 			}
 		}
 
 		if foundRecord == nil {
-			t.Fatalf("Record not found => %s", testRecord.Name)
+			t.Fatalf("Record not found => %s", testRecord.RR().Name)
 		}
 	}
 }

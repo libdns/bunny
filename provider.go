@@ -3,6 +3,7 @@ package bunny
 import (
 	"context"
 	"strings"
+	"sync"
 
 	"github.com/libdns/libdns"
 )
@@ -13,11 +14,19 @@ type Provider struct {
 	AccessKey string                        `json:"access_key"`
 	Debug     bool                          `json:"debug"`
 	Logger    func(string, []libdns.Record) `json:"-"`
+
+	zones   map[string]bunnyZone `json:"-"`
+	zonesMu sync.Mutex
 }
 
 // GetRecords lists all the records in the zone.
-func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record, error) {
-	records, err := p.getAllRecords(ctx, unFQDN(zone))
+func (p *Provider) GetRecords(ctx context.Context, domain string) ([]libdns.Record, error) {
+	zone, err := p.getZone(ctx, unFQDN(domain))
+	if err != nil {
+		return nil, err
+	}
+
+	records, err := p.getAllRecords(ctx, zone)
 	if err != nil {
 		return nil, err
 	}
@@ -26,11 +35,15 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 }
 
 // AppendRecords adds records to the zone. It returns the records that were added.
-func (p *Provider) AppendRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
-	var appendedRecords []libdns.Record
+func (p *Provider) AppendRecords(ctx context.Context, domain string, records []libdns.Record) ([]libdns.Record, error) {
+	zone, err := p.getZone(ctx, unFQDN(domain))
+	if err != nil {
+		return nil, err
+	}
 
+	var appendedRecords []libdns.Record
 	for _, record := range records {
-		newRecord, err := p.createRecord(ctx, unFQDN(zone), record)
+		newRecord, err := p.createRecord(ctx, zone, record)
 		if err != nil {
 			return nil, err
 		}
@@ -42,11 +55,15 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 
 // SetRecords sets the records in the zone, either by updating existing records or creating new ones.
 // It returns the updated records.
-func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
-	var setRecords []libdns.Record
+func (p *Provider) SetRecords(ctx context.Context, domain string, records []libdns.Record) ([]libdns.Record, error) {
+	zone, err := p.getZone(ctx, unFQDN(domain))
+	if err != nil {
+		return nil, err
+	}
 
+	var setRecords []libdns.Record
 	for _, record := range records {
-		setRecord, err := p.createOrUpdateRecord(ctx, unFQDN(zone), record)
+		setRecord, err := p.createOrUpdateRecord(ctx, zone, record)
 		if err != nil {
 			return setRecords, err
 		}
@@ -57,9 +74,14 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 }
 
 // DeleteRecords deletes the records from the zone. It returns the records that were deleted.
-func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
+func (p *Provider) DeleteRecords(ctx context.Context, domain string, records []libdns.Record) ([]libdns.Record, error) {
+	zone, err := p.getZone(ctx, unFQDN(domain))
+	if err != nil {
+		return nil, err
+	}
+
 	for _, record := range records {
-		err := p.deleteRecord(ctx, unFQDN(zone), record)
+		err := p.deleteRecord(ctx, zone, record)
 		if err != nil {
 			return nil, err
 		}
