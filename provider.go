@@ -90,6 +90,23 @@ func (p *Provider) DeleteRecords(ctx context.Context, domain string, records []l
 	return records, nil
 }
 
+// ListZones returns the list of available DNS zones.
+func (p *Provider) ListZones(ctx context.Context) ([]libdns.Zone, error) {
+	bunnyZones, err := p.getAllZones(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	zones := make([]libdns.Zone, len(bunnyZones))
+	for i, bunnyZone := range bunnyZones {
+		zones[i] = libdns.Zone{
+			Name: bunnyZone.Domain,
+		}
+	}
+
+	return zones, nil
+}
+
 // unFQDN trims any trailing "." from fqdn. Bunny.net's API does not use FQDNs.
 func unFQDN(fqdn string) string {
 	return strings.TrimSuffix(fqdn, ".")
@@ -101,4 +118,5 @@ var (
 	_ libdns.RecordAppender = (*Provider)(nil)
 	_ libdns.RecordSetter   = (*Provider)(nil)
 	_ libdns.RecordDeleter  = (*Provider)(nil)
+	_ libdns.ZoneLister     = (*Provider)(nil)
 )

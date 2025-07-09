@@ -66,6 +66,29 @@ func (p *Provider) doRequest(request *http.Request) ([]byte, error) {
 	return data, nil
 }
 
+func (p *Provider) getAllZones(ctx context.Context) ([]bunnyZone, error) {
+	p.log("fetching all zones")
+
+	req, err := http.NewRequestWithContext(ctx, "GET", "https://api.bunny.net/dnszone", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := p.doRequest(req)
+	if err != nil {
+		return nil, err
+	}
+
+	result := getAllZonesResponse{}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, err
+	}
+
+	p.log(fmt.Sprintf("retrieved %d zone(s)", len(result.Zones)))
+
+	return result.Zones, nil
+}
+
 func (p *Provider) getZone(ctx context.Context, domain string) (bunnyZone, error) {
 	p.zonesMu.Lock()
 	defer p.zonesMu.Unlock()
