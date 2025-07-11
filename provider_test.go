@@ -134,7 +134,6 @@ func Test_AppendRecords(t *testing.T) {
 	defer cleanupFunc(newRecords)
 
 	records, err := p.AppendRecords(context.Background(), envZone+".", newRecords)
-
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +149,6 @@ func Test_AppendRecords(t *testing.T) {
 	}
 
 	records, err = p.GetRecords(context.Background(), envZone+".")
-
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,7 +182,6 @@ func Test_DeleteRecords(t *testing.T) {
 	}
 
 	records, err := p.DeleteRecords(context.Background(), envZone, deletedRecords)
-
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +197,6 @@ func Test_DeleteRecords(t *testing.T) {
 	}
 
 	records, err = p.GetRecords(context.Background(), envZone)
-
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -268,7 +264,6 @@ func Test_SetRecords(t *testing.T) {
 	defer cleanupFunc(updatedRecords)
 
 	records, err := p.SetRecords(context.Background(), envZone, updatedRecords)
-
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -284,7 +279,6 @@ func Test_SetRecords(t *testing.T) {
 	}
 
 	records, err = p.GetRecords(context.Background(), envZone)
-
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -364,7 +358,6 @@ func Test_NestedRecords(t *testing.T) {
 	// Check that records retrieved from a "subdomain" are normalised correctly.
 
 	records, err = p.GetRecords(context.Background(), fmt.Sprintf("subdomain.%s", envZone))
-
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -384,5 +377,27 @@ func Test_NestedRecords(t *testing.T) {
 		if foundRecord == nil {
 			t.Fatalf("Record not found => %s", testRecord.RR().Name)
 		}
+	}
+}
+
+func Test_ListZones(t *testing.T) {
+	p := &bunny.Provider{
+		AccessKey: envAccessKey,
+		Debug:     true,
+	}
+
+	zones, err := p.ListZones(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	foundZone := false
+	for _, zone := range zones {
+		if envZone == zone.Name {
+			foundZone = true
+		}
+	}
+	if !foundZone {
+		t.Fatal("Failed to find BUNNY_TEST_ZONE in ListZones call")
 	}
 }
