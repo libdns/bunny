@@ -379,6 +379,8 @@ const (
 	bunnyTypePTR      = 10
 	bunnyTypeScript   = 11
 	bunnyTypeNS       = 12
+	bunnyTypeSVCB     = 13
+	bunnyTypeHTTPS    = 14
 )
 
 // Converts the Bunny.net record type to the libdns record type.
@@ -410,6 +412,10 @@ func fromBunnyType(t int) (string, error) {
 		return "Script", nil
 	case bunnyTypeNS:
 		return "NS", nil
+	case bunnyTypeSVCB:
+		return "SVCB", nil
+	case bunnyTypeHTTPS:
+		return "HTTPS", nil
 	default:
 		return "", fmt.Errorf("unknown record type ID: %d", t)
 	}
@@ -444,6 +450,10 @@ func toBunnyType(t string) (int, error) {
 		return bunnyTypeScript, nil
 	case "NS":
 		return bunnyTypeNS, nil
+	case "SVCB":
+		return bunnyTypeSVCB, nil
+	case "HTTPS":
+		return bunnyTypeHTTPS, nil
 	default:
 		return -1, fmt.Errorf("unknown record type: %s", t)
 	}
@@ -485,6 +495,9 @@ func (zone bunnyZone) bunnyRecord(record libdns.Record) (bunnyRecord, error) {
 		r.Weight = int32(rec.Weight)
 		r.Port = int32(rec.Port)
 		r.Value = rec.Target
+	case libdns.ServiceBinding:
+		r.Priority = int32(rec.Priority)
+		r.Value = fmt.Sprintf("%s %s", rec.Target, rec.Params)
 	}
 	return r, nil
 }
@@ -548,6 +561,34 @@ func (zone bunnyZone) libdnsRecord(record bunnyRecord) (libdns.Record, error) {
 			Weight:    uint16(record.Weight),
 			Port:      uint16(record.Port),
 			Target:    record.Value,
+		}, nil
+	case "SVCB", "HTTPS":
+		name := r.Name
+		scheme := "https"
+		if r.Type == "SVCB" {
+			parts := strings.SplitN(r.Name, ".", 2)
+			if len(parts) < 1 {
+				return libdns.ServiceBinding{}, fmt.Errorf("name %v does not contain enough fields; expected format: '_proto.name' or '_proto'", r.Name)
+			}
+			scheme = strings.TrimPrefix(parts[0], "_")
+			if len(parts) == 2 {
+				name = parts[1]
+			} else {
+				name = "@"
+			}
+		}
+		parts := strings.SplitN(record.Value, " ", 2)
+		params, err := libdns.ParseSvcParams(parts[1])
+		if err != nil {
+			return libdns.ServiceBinding{}, err
+		}
+		return libdns.ServiceBinding{
+			Name:     name,
+			TTL:      r.TTL,
+			Scheme:   scheme,
+			Priority: uint16(record.Priority),
+			Target:   parts[0],
+			Params:   params,
 		}, nil
 	default:
 		return r, nil

@@ -47,12 +47,28 @@ var (
 		libdns.SRV{
 			Service:   "sip",
 			Transport: "tcp",
-			Name:      "test_5",
+			Name:      "test_6",
 			TTL:       ttl,
 			Priority:  0,
 			Weight:    5,
 			Port:      5060,
 			Target:    "sipserver.example.com",
+		},
+		libdns.ServiceBinding{
+			Name:     "test_7",
+			TTL:      ttl,
+			Scheme:   "https",
+			Priority: 1,
+			Target:   ".",
+			Params:   libdns.SvcParams{"alpn": []string{"h2", "h3"}},
+		},
+		libdns.ServiceBinding{
+			Name:     "test_8",
+			TTL:      ttl,
+			Scheme:   "tcp",
+			Priority: 1,
+			Target:   ".",
+			Params:   libdns.SvcParams{"alpn": []string{"h2"}},
 		},
 	}
 )
