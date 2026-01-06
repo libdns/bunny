@@ -602,7 +602,7 @@ func (zone bunnyZone) filterBunnyRecords(haystack []bunnyRecord, record libdns.R
 	}
 	records := []bunnyRecord{}
 	for _, r := range haystack {
-		if r.Name == needle.Name && r.Type == needle.Type {
+		if r.Name == needle.Name && r.Type == needle.Type && r.Value == needle.Value {
 			records = append(records, r)
 		}
 	}
