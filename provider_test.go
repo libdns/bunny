@@ -98,7 +98,7 @@ func compareRecords(lhs libdns.Record, rhs libdns.Record) bool {
 		lhs.RR().TTL == rhs.RR().TTL
 }
 
-func setupTestRecords(t *testing.T, p *bunny.Provider) ([]libdns.Record, testRecordsCleanup) {
+func setupTestRecords(t *testing.T, p *bunny.Provider, testRecords []libdns.Record) ([]libdns.Record, testRecordsCleanup) {
 	records, err := p.AppendRecords(context.Background(), envZone, testRecords)
 	if err != nil {
 		t.Fatal(err)
@@ -146,7 +146,7 @@ func Test_AppendRecords(t *testing.T) {
 		},
 	}
 
-	_, cleanupFunc := setupTestRecords(t, p)
+	_, cleanupFunc := setupTestRecords(t, p, testRecords)
 	defer cleanupFunc(newRecords)
 
 	records, err := p.AppendRecords(context.Background(), envZone+".", newRecords)
@@ -186,7 +186,7 @@ func Test_DeleteRecords(t *testing.T) {
 		Debug:     true,
 	}
 
-	_, cleanupFunc := setupTestRecords(t, p)
+	_, cleanupFunc := setupTestRecords(t, p, testRecords)
 	defer cleanupFunc(nil)
 
 	deletedRecords := []libdns.Record{
@@ -234,7 +234,7 @@ func Test_GetRecords(t *testing.T) {
 		Debug:     true,
 	}
 
-	testRecords, cleanupFunc := setupTestRecords(t, p)
+	testRecords, cleanupFunc := setupTestRecords(t, p, testRecords)
 	defer cleanupFunc(nil)
 
 	records, err := p.GetRecords(context.Background(), envZone)
@@ -276,7 +276,7 @@ func Test_SetRecords(t *testing.T) {
 		},
 	}
 
-	_, cleanupFunc := setupTestRecords(t, p)
+	_, cleanupFunc := setupTestRecords(t, p, testRecords)
 	defer cleanupFunc(updatedRecords)
 
 	records, err := p.SetRecords(context.Background(), envZone, updatedRecords)
