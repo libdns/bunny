@@ -3,6 +3,7 @@ package bunny_test
 import (
 	"context"
 	"fmt"
+	"net/netip"
 	"os"
 	"testing"
 	"time"
@@ -15,6 +16,7 @@ var (
 	envAccessKey = ""
 	envZone      = ""
 	ttl          = time.Duration(120 * time.Second)
+	uniqueName   = "cvhcrfdslrvxcrzfos"
 	testRecords  = []libdns.Record{
 		libdns.TXT{
 			Name: "test_1",
@@ -69,6 +71,38 @@ var (
 			Priority: 1,
 			Target:   ".",
 			Params:   libdns.SvcParams{"alpn": []string{"h2"}},
+		},
+	}
+	testRecordsRR = []libdns.Record{
+		libdns.Address{
+			Name: uniqueName,
+			IP:   netip.MustParseAddr("192.168.123.1"),
+			TTL:  ttl,
+		},
+		libdns.Address{
+			Name: uniqueName,
+			IP:   netip.MustParseAddr("192.168.123.2"),
+			TTL:  ttl,
+		},
+		libdns.Address{
+			Name: uniqueName,
+			IP:   netip.MustParseAddr("192.168.123.3"),
+			TTL:  ttl,
+		},
+		libdns.Address{
+			Name: uniqueName,
+			IP:   netip.MustParseAddr("fd12:3456:789a:1::1"),
+			TTL:  ttl,
+		},
+		libdns.Address{
+			Name: uniqueName,
+			IP:   netip.MustParseAddr("fd12:3456:789a:1::2"),
+			TTL:  ttl,
+		},
+		libdns.Address{
+			Name: uniqueName,
+			IP:   netip.MustParseAddr("fd12:3456:789a:1::3"),
+			TTL:  ttl,
 		},
 	}
 )
@@ -415,5 +449,99 @@ func Test_ListZones(t *testing.T) {
 	}
 	if !foundZone {
 		t.Fatal("Failed to find BUNNY_TEST_ZONE in ListZones call")
+	}
+}
+
+func Test_RoundRobin(t *testing.T) {
+	p := &bunny.Provider{
+		AccessKey: envAccessKey,
+		Debug:     true,
+	}
+
+	testRecordTXT := libdns.Record(
+		libdns.TXT{
+			Name: uniqueName,
+			TTL:  ttl,
+			Text: "test_value_1",
+		},
+	)
+
+	updateRecords := []libdns.Record{
+		libdns.Address{
+			Name: uniqueName,
+			IP:   netip.MustParseAddr("192.168.123.4"),
+			TTL:  ttl,
+		},
+		libdns.Address{
+			Name: uniqueName,
+			IP:   netip.MustParseAddr("192.168.123.5"),
+			TTL:  ttl,
+		},
+		libdns.Address{
+			Name: uniqueName,
+			IP:   netip.MustParseAddr("fd12:3456:789a:1::4"),
+			TTL:  ttl,
+		},
+		libdns.Address{
+			Name: uniqueName,
+			IP:   netip.MustParseAddr("fd12:3456:789a:1::5"),
+			TTL:  ttl,
+		},
+	}
+
+	testRecords := append(testRecordsRR, testRecordTXT)
+
+	_, cleanupFunc := setupTestRecords(t, p, testRecords)
+	defer cleanupFunc(updateRecords)
+
+	records, err := p.GetRecords(context.Background(), envZone)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, testRecord := range testRecords {
+		contains_ := contains(records, func(record libdns.Record) bool {
+			return compareRecords(record, testRecord)
+		})
+
+		if !contains_ {
+			t.Fatalf("record %v does not exist on nameserver", testRecord)
+		}
+	}
+
+	if len(records) != len(testRecords) {
+		t.Fatalf("len(records) != len(testRecords) => %d != %d", len(records), len(testRecords))
+	}
+
+	setRecords, err := p.SetRecords(context.Background(), envZone, updateRecords)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, updateRecord := range updateRecords {
+		contains_ := contains(setRecords, func(record libdns.Record) bool {
+			return compareRecords(record, updateRecord)
+		})
+
+		if !contains_ {
+			t.Fatalf("result does not contain record %v", updateRecord)
+		}
+	}
+
+	records, err = p.GetRecords(context.Background(), envZone)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectedRecords := append(updateRecords, testRecordTXT)
+
+	for _, expectedRecord := range expectedRecords {
+		contains_ := contains(records, func(record libdns.Record) bool {
+			return compareRecords(record, expectedRecord)
+		})
+
+		if !contains_ {
+			t.Fatalf("record %v does not exist in zone", expectedRecord)
+		}
 	}
 }
