@@ -295,27 +295,6 @@ func (p *Provider) updateRecord(ctx context.Context, zone bunnyZone, record libd
 	return nil
 }
 
-// Creates a new record if it does not exist, or updates an existing one.
-func (p *Provider) createOrUpdateRecord(ctx context.Context, zone bunnyZone, record libdns.Record) (libdns.Record, error) {
-	bunnyRecords, err := p.getDNSRecords(ctx, zone)
-	if err != nil {
-		return nil, err
-	}
-
-	matchingRecords, err := zone.filterBunnyRecords(bunnyRecords, record)
-	if err != nil {
-		return nil, err
-	}
-	if len(matchingRecords) == 0 {
-		return p.createRecord(ctx, zone, record)
-	}
-	if len(matchingRecords) > 1 {
-		return nil, fmt.Errorf("unexpectedly found more than 1 record for %s in zone %s", record.RR().Name, zone.Domain)
-	}
-	err = p.updateRecord(ctx, zone, record, matchingRecords[0].ID)
-	return record, err
-}
-
 func (p *Provider) deleteRecord(ctx context.Context, zone bunnyZone, record libdns.Record) error {
 	rr := record.RR()
 
@@ -602,7 +581,7 @@ func (zone bunnyZone) filterBunnyRecords(haystack []bunnyRecord, record libdns.R
 	}
 	records := []bunnyRecord{}
 	for _, r := range haystack {
-		if r.Name == needle.Name && r.Type == needle.Type {
+		if r.Name == needle.Name && r.Type == needle.Type && r.Value == needle.Value {
 			records = append(records, r)
 		}
 	}

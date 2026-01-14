@@ -56,21 +56,24 @@ func (p *Provider) AppendRecords(ctx context.Context, domain string, records []l
 // SetRecords sets the records in the zone, either by updating existing records or creating new ones.
 // It returns the updated records.
 func (p *Provider) SetRecords(ctx context.Context, domain string, records []libdns.Record) ([]libdns.Record, error) {
-	zone, err := p.getZone(ctx, unFQDN(domain))
+	prevs, err := p.GetRecords(ctx, domain)
 	if err != nil {
 		return nil, err
 	}
 
-	var setRecords []libdns.Record
-	for _, record := range records {
-		setRecord, err := p.createOrUpdateRecord(ctx, zone, record)
-		if err != nil {
-			return setRecords, err
+	toDelete := []libdns.Record{}
+	for _, prev := range prevs {
+		for _, new := range records {
+			if prev.RR().Name == new.RR().Name && prev.RR().Type == new.RR().Type {
+				toDelete = append(toDelete, prev)
+			}
 		}
-		setRecords = append(setRecords, setRecord)
 	}
 
-	return setRecords, nil
+	p.DeleteRecords(ctx, domain, toDelete)
+	setRecords, err := p.AppendRecords(ctx, domain, records)
+
+	return setRecords, err
 }
 
 // DeleteRecords deletes the records from the zone. It returns the records that were deleted.
