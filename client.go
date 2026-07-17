@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -24,23 +26,120 @@ type getAllZonesResponse struct {
 }
 
 type bunnyZone struct {
-	ID            int    `json:"Id"`
-	Domain        string `json:"Domain"`
-	DnsSecEnabled bool   `json:"DnsSecEnabled"`
-	nameBase      string `json:"-"`
+	ID                            int    `json:"Id"`
+	Domain                        string `json:"Domain"`
+	DnsSecEnabled                 bool   `json:"DnsSecEnabled"`
+	NameserversDetected           bool   `json:"NameserversDetected"`
+	CustomNameserversEnabled      bool   `json:"CustomNameserversEnabled"`
+	Nameserver1                   string `json:"Nameserver1"`
+	Nameserver2                   string `json:"Nameserver2"`
+	SoaEmail                      string `json:"SoaEmail"`
+	LoggingEnabled                bool   `json:"LoggingEnabled"`
+	LoggingIPAnonymizationEnabled bool   `json:"LoggingIPAnonymizationEnabled"`
+	LogAnonymizationType          int    `json:"LogAnonymizationType"`
+	DateCreated                   string `json:"DateCreated"`
+	DateModified                  string `json:"DateModified"`
+	nameBase                      string `json:"-"`
+}
+
+// zone converts the wire format to the exported Zone type.
+func (z bunnyZone) zone() Zone {
+	return Zone{
+		ID:                            int64(z.ID),
+		Domain:                        z.Domain,
+		DNSSECEnabled:                 z.DnsSecEnabled,
+		NameserversDetected:           z.NameserversDetected,
+		CustomNameserversEnabled:      z.CustomNameserversEnabled,
+		Nameserver1:                   z.Nameserver1,
+		Nameserver2:                   z.Nameserver2,
+		SoaEmail:                      z.SoaEmail,
+		LoggingEnabled:                z.LoggingEnabled,
+		LoggingIPAnonymizationEnabled: z.LoggingIPAnonymizationEnabled,
+		LogAnonymizationType:          z.LogAnonymizationType,
+		DateCreated:                   z.DateCreated,
+		DateModified:                  z.DateModified,
+	}
 }
 
 type bunnyRecord struct {
-	ID       int    `json:"Id,omitempty"`
-	Type     int    `json:"Type"`
-	TTL      int    `json:"Ttl"`
-	Value    string `json:"Value"`
-	Name     string `json:"Name"`
-	Weight   int32  `json:"Weight,omitempty"`
-	Priority int32  `json:"Priority,omitempty"`
-	Flags    int    `json:"Flags,omitempty"`
-	Tag      string `json:"Tag,omitempty"`
-	Port     int32  `json:"Port,omitempty"`
+	ID                    int     `json:"Id,omitempty"`
+	Type                  int     `json:"Type"`
+	TTL                   int     `json:"Ttl"`
+	Value                 string  `json:"Value"`
+	Name                  string  `json:"Name"`
+	Weight                int32   `json:"Weight,omitempty"`
+	Priority              int32   `json:"Priority,omitempty"`
+	Flags                 int     `json:"Flags,omitempty"`
+	Tag                   string  `json:"Tag,omitempty"`
+	Port                  int32   `json:"Port,omitempty"`
+	Disabled              bool    `json:"Disabled,omitempty"`
+	Accelerated           bool    `json:"Accelerated,omitempty"`
+	AcceleratedPullZoneID int64   `json:"AcceleratedPullZoneId,omitempty"`
+	PullZoneID            int64   `json:"PullZoneId,omitempty"`
+	ScriptID              int64   `json:"ScriptId,omitempty"`
+	MonitorType           int     `json:"MonitorType,omitempty"`
+	MonitorStatus         int     `json:"MonitorStatus,omitempty"`
+	GeolocationLatitude   float64 `json:"GeolocationLatitude,omitempty"`
+	GeolocationLongitude  float64 `json:"GeolocationLongitude,omitempty"`
+	LatencyZone           string  `json:"LatencyZone,omitempty"`
+	SmartRoutingType      int     `json:"SmartRoutingType,omitempty"`
+	// "Enviromental" [sic] is how the Bunny API spells it on the wire.
+	EnviromentalVariables []bunnyEnvVar `json:"EnviromentalVariables,omitempty"`
+}
+
+type bunnyEnvVar struct {
+	Name  string `json:"Name"`
+	Value string `json:"Value"`
+}
+
+// hasBunnyFields reports whether the record carries Bunny-specific data that
+// the generic libdns record types cannot represent.
+func (r bunnyRecord) hasBunnyFields() bool {
+	return r.Disabled || r.Accelerated || r.AcceleratedPullZoneID != 0 ||
+		r.PullZoneID != 0 || r.ScriptID != 0 ||
+		r.MonitorType != 0 || r.MonitorStatus != 0 ||
+		r.GeolocationLatitude != 0 || r.GeolocationLongitude != 0 ||
+		r.LatencyZone != "" || r.SmartRoutingType != 0 ||
+		len(r.EnviromentalVariables) > 0
+}
+
+// apiURL returns the base URL of the Bunny API. It can be overridden in
+// tests via the provider's unexported apiBase field.
+func (p *Provider) apiURL() string {
+	if p.apiBase != "" {
+		return p.apiBase
+	}
+	return "https://api.bunny.net"
+}
+
+// doJSON sends a request with an optional JSON body and decodes the JSON
+// response into out. Either body or out may be nil.
+func (p *Provider) doJSON(ctx context.Context, method, url string, body, out any) error {
+	var reqBody io.Reader
+	if body != nil {
+		data, err := json.Marshal(body)
+		if err != nil {
+			return err
+		}
+		reqBody = bytes.NewReader(data)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
+	if err != nil {
+		return err
+	}
+	if body != nil {
+		req.Header.Add("content-type", "application/json")
+	}
+
+	data, err := p.doRequest(req)
+	if err != nil {
+		return err
+	}
+	if out == nil {
+		return nil
+	}
+	return json.Unmarshal(data, out)
 }
 
 func (p *Provider) doRequest(request *http.Request) ([]byte, error) {
@@ -53,11 +152,16 @@ func (p *Provider) doRequest(request *http.Request) ([]byte, error) {
 		return nil, err
 	}
 
+	defer response.Body.Close()
+
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(response.Body, 1024))
+		if len(body) > 0 {
+			return nil, fmt.Errorf("%s (%d): %s", http.StatusText(response.StatusCode), response.StatusCode, body)
+		}
 		return nil, fmt.Errorf("%s (%d)", http.StatusText(response.StatusCode), response.StatusCode)
 	}
 
-	defer response.Body.Close()
 	data, err := io.ReadAll(response.Body)
 	if err != nil {
 		return nil, err
@@ -69,18 +173,8 @@ func (p *Provider) doRequest(request *http.Request) ([]byte, error) {
 func (p *Provider) getAllZones(ctx context.Context) ([]bunnyZone, error) {
 	p.log("fetching all zones")
 
-	req, err := http.NewRequestWithContext(ctx, "GET", "https://api.bunny.net/dnszone", nil)
-	if err != nil {
-		return nil, err
-	}
-
-	data, err := p.doRequest(req)
-	if err != nil {
-		return nil, err
-	}
-
 	result := getAllZonesResponse{}
-	if err := json.Unmarshal(data, &result); err != nil {
+	if err := p.doJSON(ctx, "GET", p.apiURL()+"/dnszone", nil, &result); err != nil {
 		return nil, err
 	}
 
@@ -114,19 +208,9 @@ func (p *Provider) getZone(ctx context.Context, domain string) (bunnyZone, error
 
 	// The API can only return up to 1000 records. So we need to search for the
 	// apex domain to be safe and then filter from there to get an exact result.
-	req, err := http.NewRequestWithContext(ctx, "GET",
-		fmt.Sprintf("https://api.bunny.net/dnszone?search=%s", url.QueryEscape(zone)), nil)
-	if err != nil {
-		return bunnyZone{}, err
-	}
-
-	data, err := p.doRequest(req)
-	if err != nil {
-		return bunnyZone{}, err
-	}
-
 	result := getAllZonesResponse{}
-	if err := json.Unmarshal(data, &result); err != nil {
+	if err := p.doJSON(ctx, "GET",
+		fmt.Sprintf("%s/dnszone?search=%s", p.apiURL(), url.QueryEscape(zone)), nil, &result); err != nil {
 		return bunnyZone{}, err
 	}
 
@@ -179,19 +263,9 @@ func getBaseDomainNameGuesses(domain string) []string {
 func (p *Provider) getDNSRecords(ctx context.Context, zone bunnyZone) ([]bunnyRecord, error) {
 	p.log(fmt.Sprintf("fetching all records in zone %s", zone.Domain))
 
-	req, err := http.NewRequestWithContext(ctx, "GET",
-		fmt.Sprintf("https://api.bunny.net/dnszone/%d", zone.ID), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	data, err := p.doRequest(req)
-	if err != nil {
-		return nil, err
-	}
-
 	result := getAllRecordsResponse{}
-	if err := json.Unmarshal(data, &result); err != nil {
+	if err := p.doJSON(ctx, "GET",
+		fmt.Sprintf("%s/dnszone/%d", p.apiURL(), zone.ID), nil, &result); err != nil {
 		return nil, err
 	}
 
@@ -230,25 +304,9 @@ func (p *Provider) createRecord(ctx context.Context, zone bunnyZone, record libd
 		return nil, err
 	}
 
-	reqBuffer, err := json.Marshal(reqData)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "PUT",
-		fmt.Sprintf("https://api.bunny.net/dnszone/%d/records", zone.ID), bytes.NewBuffer(reqBuffer))
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("content-type", "application/json")
-	data, err := p.doRequest(req)
-	if err != nil {
-		return nil, err
-	}
-
 	result := bunnyRecord{}
-	if err := json.Unmarshal(data, &result); err != nil {
+	if err := p.doJSON(ctx, "PUT",
+		fmt.Sprintf("%s/dnszone/%d/records", p.apiURL(), zone.ID), reqData, &result); err != nil {
 		return nil, err
 	}
 
@@ -272,21 +330,8 @@ func (p *Provider) updateRecord(ctx context.Context, zone bunnyZone, record libd
 		return err
 	}
 
-	reqBuffer, err := json.Marshal(reqData)
-	if err != nil {
-		return err
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST",
-		fmt.Sprintf("https://api.bunny.net/dnszone/%d/records/%d", zone.ID, id), bytes.NewBuffer(reqBuffer))
-	if err != nil {
-		return err
-	}
-
-	req.Header.Add("content-type", "application/json")
-
-	_, err = p.doRequest(req)
-	if err != nil {
+	if err := p.doJSON(ctx, "POST",
+		fmt.Sprintf("%s/dnszone/%d/records/%d", p.apiURL(), zone.ID, id), reqData, nil); err != nil {
 		return err
 	}
 
@@ -315,20 +360,30 @@ func (p *Provider) deleteRecord(ctx context.Context, zone bunnyZone, record libd
 		return nil
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "DELETE",
-		fmt.Sprintf("https://api.bunny.net/dnszone/%d/records/%d", zone.ID, matchingRecords[0].ID), nil)
-	if err != nil {
-		return err
-	}
-
-	_, err = p.doRequest(req)
-	if err != nil {
+	if err := p.deleteRecordByID(ctx, zone, matchingRecords[0].ID); err != nil {
 		return err
 	}
 
 	p.log(fmt.Sprintf("done deleting %s record %d in zone %s", rr.Type, matchingRecords[0].ID, zone.Domain))
 
 	return nil
+}
+
+func (p *Provider) deleteRecordByID(ctx context.Context, zone bunnyZone, id int) error {
+	return p.doJSON(ctx, "DELETE",
+		fmt.Sprintf("%s/dnszone/%d/records/%d", p.apiURL(), zone.ID, id), nil, nil)
+}
+
+// forgetZone drops all cached lookups resolving to the given zone ID so the
+// next lookup fetches fresh zone data.
+func (p *Provider) forgetZone(id int) {
+	p.zonesMu.Lock()
+	defer p.zonesMu.Unlock()
+	for domain, zone := range p.zones {
+		if zone.ID == id {
+			delete(p.zones, domain)
+		}
+	}
 }
 
 func (p *Provider) log(msg string, records ...libdns.Record) {
@@ -477,11 +532,76 @@ func (zone bunnyZone) bunnyRecord(record libdns.Record) (bunnyRecord, error) {
 	case libdns.ServiceBinding:
 		r.Priority = int32(rec.Priority)
 		r.Value = fmt.Sprintf("%s %s", rec.Target, rec.Params)
+	case Record:
+		r.Disabled = rec.Disabled
+		r.Accelerated = rec.Accelerated
+		r.AcceleratedPullZoneID = rec.AcceleratedPullZoneID
+		r.PullZoneID = rec.PullZoneID
+		r.ScriptID = rec.ScriptID
+		r.MonitorType = rec.MonitorType
+		r.GeolocationLatitude = rec.GeolocationLatitude
+		r.GeolocationLongitude = rec.GeolocationLongitude
+		r.LatencyZone = rec.LatencyZone
+		r.SmartRoutingType = rec.SmartRoutingType
+		r.EnviromentalVariables = toBunnyEnvVars(rec.EnvironmentalVariables)
 	}
 	return r, nil
 }
 
+func toBunnyEnvVars(vars map[string]string) []bunnyEnvVar {
+	if len(vars) == 0 {
+		return nil
+	}
+	wire := make([]bunnyEnvVar, 0, len(vars))
+	for _, name := range slices.Sorted(maps.Keys(vars)) {
+		wire = append(wire, bunnyEnvVar{Name: name, Value: vars[name]})
+	}
+	return wire
+}
+
+func fromBunnyEnvVars(vars []bunnyEnvVar) map[string]string {
+	if len(vars) == 0 {
+		return nil
+	}
+	result := make(map[string]string, len(vars))
+	for _, v := range vars {
+		result[v.Name] = v.Value
+	}
+	return result
+}
+
 func (zone bunnyZone) libdnsRecord(record bunnyRecord) (libdns.Record, error) {
+	base, err := zone.libdnsBaseRecord(record)
+	if err != nil || !record.hasBunnyFields() {
+		return base, err
+	}
+
+	// The record carries Bunny-specific data the generic libdns types cannot
+	// hold, so return it as a Record instead.
+	rr := base.RR()
+	return Record{
+		Name:                   rr.Name,
+		TTL:                    rr.TTL,
+		Type:                   rr.Type,
+		Data:                   rr.Data,
+		Disabled:               record.Disabled,
+		Accelerated:            record.Accelerated,
+		AcceleratedPullZoneID:  record.AcceleratedPullZoneID,
+		PullZoneID:             record.PullZoneID,
+		ScriptID:               record.ScriptID,
+		MonitorType:            record.MonitorType,
+		MonitorStatus:          record.MonitorStatus,
+		GeolocationLatitude:    record.GeolocationLatitude,
+		GeolocationLongitude:   record.GeolocationLongitude,
+		LatencyZone:            record.LatencyZone,
+		SmartRoutingType:       record.SmartRoutingType,
+		EnvironmentalVariables: fromBunnyEnvVars(record.EnviromentalVariables),
+	}, nil
+}
+
+// libdnsBaseRecord converts the wire format to the most specific generic
+// libdns record type.
+func (zone bunnyZone) libdnsBaseRecord(record bunnyRecord) (libdns.Record, error) {
 	rType, err := fromBunnyType(record.Type)
 	if err != nil {
 		return nil, err

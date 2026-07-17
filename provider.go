@@ -17,6 +17,9 @@ type Provider struct {
 
 	zones   map[string]bunnyZone `json:"-"`
 	zonesMu sync.Mutex
+
+	// apiBase overrides the API base URL in tests.
+	apiBase string
 }
 
 // GetRecords lists all the records in the zone.
@@ -56,24 +59,71 @@ func (p *Provider) AppendRecords(ctx context.Context, domain string, records []l
 // SetRecords sets the records in the zone, either by updating existing records or creating new ones.
 // It returns the updated records.
 func (p *Provider) SetRecords(ctx context.Context, domain string, records []libdns.Record) ([]libdns.Record, error) {
-	prevs, err := p.GetRecords(ctx, domain)
+	zone, err := p.getZone(ctx, unFQDN(domain))
 	if err != nil {
 		return nil, err
 	}
 
-	toDelete := []libdns.Record{}
-	for _, prev := range prevs {
-		for _, new := range records {
-			if prev.RR().Name == new.RR().Name && prev.RR().Type == new.RR().Type {
-				toDelete = append(toDelete, prev)
+	existing, err := p.getDNSRecords(ctx, zone)
+	if err != nil {
+		return nil, err
+	}
+
+	// Group the desired records by name and type, comparing names in the
+	// zone-relative form the API uses.
+	type recordKey struct {
+		name string
+		typ  int
+	}
+	desired := make(map[recordKey][]libdns.Record)
+	keys := []recordKey{}
+	for _, record := range records {
+		wire, err := zone.bunnyRecord(record)
+		if err != nil {
+			return nil, err
+		}
+		key := recordKey{wire.Name, wire.Type}
+		if _, ok := desired[key]; !ok {
+			keys = append(keys, key)
+		}
+		desired[key] = append(desired[key], record)
+	}
+
+	existingByKey := make(map[recordKey][]bunnyRecord)
+	for _, record := range existing {
+		key := recordKey{record.Name, record.Type}
+		existingByKey[key] = append(existingByKey[key], record)
+	}
+
+	// For each name+type, update existing records in place, delete surplus
+	// ones and create the rest, so the zone ends up with exactly the desired
+	// records for that name and type.
+	setRecords := []libdns.Record{}
+	for _, key := range keys {
+		olds, news := existingByKey[key], desired[key]
+
+		updates := min(len(olds), len(news))
+		for i := 0; i < updates; i++ {
+			if err := p.updateRecord(ctx, zone, news[i], olds[i].ID); err != nil {
+				return nil, err
 			}
+			setRecords = append(setRecords, news[i])
+		}
+		for _, old := range olds[updates:] {
+			if err := p.deleteRecordByID(ctx, zone, old.ID); err != nil {
+				return nil, err
+			}
+		}
+		for _, new := range news[updates:] {
+			created, err := p.createRecord(ctx, zone, new)
+			if err != nil {
+				return nil, err
+			}
+			setRecords = append(setRecords, created)
 		}
 	}
 
-	p.DeleteRecords(ctx, domain, toDelete)
-	setRecords, err := p.AppendRecords(ctx, domain, records)
-
-	return setRecords, err
+	return setRecords, nil
 }
 
 // DeleteRecords deletes the records from the zone. It returns the records that were deleted.

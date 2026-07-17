@@ -52,6 +52,65 @@ func main() {
 
 ```
 
+## Zone management
+
+Beyond the standard libdns interfaces, `*bunny.Provider` exposes the full Bunny.net DNS zone API: `GetZone`, `CreateZone`, `UpdateZone`, `DeleteZone`, `CheckZoneAvailability`, `ExportZone`, `ImportZone` and `GetZoneStatistics`.
+
+```go
+available, err := provider.CheckZoneAvailability(ctx, "example.com")
+if err != nil || !available {
+	return err
+}
+
+zone, err := provider.CreateZone(ctx, "example.com")
+if err != nil {
+	return err
+}
+fmt.Printf("created zone %d, nameservers %s / %s\n", zone.ID, zone.Nameserver1, zone.Nameserver2)
+
+// Import records from a BIND zone file, then export them again.
+result, err := provider.ImportZone(ctx, "example.com", zoneFileBytes)
+zoneFile, err := provider.ExportZone(ctx, "example.com")
+
+// Update zone settings; nil fields are left unchanged.
+soa := "hostmaster@example.com"
+zone, err = provider.UpdateZone(ctx, "example.com", bunny.ZoneUpdate{SoaEmail: &soa})
+```
+
+## DNSSEC
+
+Bunny.net manages DNSSEC keys and signs zones automatically:
+
+```go
+info, err := provider.EnableDNSSEC(ctx, "example.com")
+if err != nil {
+	return err
+}
+if !info.DSConfigured {
+	fmt.Printf("publish this DS record at your registrar: %s\n", info.DSRecord)
+}
+```
+
+**Bunny.net does not publish the DS record at your domain's registrar.** Until you add the returned DS record at the registrar (or parent zone) yourself, DNSSEC validation is not active. Likewise, remove the DS record at the registrar *before* calling `DisableDNSSEC`, or validating resolvers will fail to resolve the zone.
+
+## Bunny-specific record fields
+
+Records read from a zone are returned as the generic libdns types. If a record carries Bunny-specific features — disabled state, GeoDNS/latency routing, health monitoring, CDN acceleration, pull-zone/script targets — it is returned as a `bunny.Record`, which also lets you set those fields when writing records:
+
+```go
+records, err := provider.AppendRecords(ctx, "example.com", []libdns.Record{
+	bunny.Record{
+		Name:                 "eu",
+		Type:                 "A",
+		Data:                 "192.0.2.1",
+		TTL:                  5 * time.Minute,
+		GeolocationLatitude:  48.2,
+		GeolocationLongitude: 16.4,
+		SmartRoutingType:     bunny.SmartRoutingGeolocation,
+	},
+})
+```
+
 ## Debugging
 
 You can enable logging by configuring a custom logger or by setting `Debug` to true.
