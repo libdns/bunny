@@ -93,6 +93,24 @@ if !info.DSConfigured {
 
 **Bunny.net does not publish the DS record at your domain's registrar.** Until you add the returned DS record at the registrar (or parent zone) yourself, DNSSEC validation is not active. Likewise, remove the DS record at the registrar *before* calling `DisableDNSSEC`, or validating resolvers will fail to resolve the zone.
 
+## Bunny-specific record fields
+
+Records read from a zone are returned as the generic libdns types. If a record carries Bunny-specific features — disabled state, GeoDNS/latency routing, health monitoring, CDN acceleration, pull-zone/script targets — it is returned as a `bunny.Record`, which also lets you set those fields when writing records:
+
+```go
+records, err := provider.AppendRecords(ctx, "example.com", []libdns.Record{
+	bunny.Record{
+		Name:                 "eu",
+		Type:                 "A",
+		Data:                 "192.0.2.1",
+		TTL:                  5 * time.Minute,
+		GeolocationLatitude:  48.2,
+		GeolocationLongitude: 16.4,
+		SmartRoutingType:     bunny.SmartRoutingGeolocation,
+	},
+})
+```
+
 ## Debugging
 
 You can enable logging by configuring a custom logger or by setting `Debug` to true.
