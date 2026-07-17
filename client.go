@@ -314,6 +314,18 @@ func (p *Provider) deleteRecordByID(ctx context.Context, zone bunnyZone, id int)
 		fmt.Sprintf("%s/dnszone/%d/records/%d", p.apiURL(), zone.ID, id), nil, nil)
 }
 
+// forgetZone drops all cached lookups resolving to the given zone ID so the
+// next lookup fetches fresh zone data.
+func (p *Provider) forgetZone(id int) {
+	p.zonesMu.Lock()
+	defer p.zonesMu.Unlock()
+	for domain, zone := range p.zones {
+		if zone.ID == id {
+			delete(p.zones, domain)
+		}
+	}
+}
+
 func (p *Provider) log(msg string, records ...libdns.Record) {
 	if p.Logger != nil {
 		p.Logger(msg, records)
