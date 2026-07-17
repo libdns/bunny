@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -60,16 +62,45 @@ func (z bunnyZone) zone() Zone {
 }
 
 type bunnyRecord struct {
-	ID       int    `json:"Id,omitempty"`
-	Type     int    `json:"Type"`
-	TTL      int    `json:"Ttl"`
-	Value    string `json:"Value"`
-	Name     string `json:"Name"`
-	Weight   int32  `json:"Weight,omitempty"`
-	Priority int32  `json:"Priority,omitempty"`
-	Flags    int    `json:"Flags,omitempty"`
-	Tag      string `json:"Tag,omitempty"`
-	Port     int32  `json:"Port,omitempty"`
+	ID                    int     `json:"Id,omitempty"`
+	Type                  int     `json:"Type"`
+	TTL                   int     `json:"Ttl"`
+	Value                 string  `json:"Value"`
+	Name                  string  `json:"Name"`
+	Weight                int32   `json:"Weight,omitempty"`
+	Priority              int32   `json:"Priority,omitempty"`
+	Flags                 int     `json:"Flags,omitempty"`
+	Tag                   string  `json:"Tag,omitempty"`
+	Port                  int32   `json:"Port,omitempty"`
+	Disabled              bool    `json:"Disabled,omitempty"`
+	Accelerated           bool    `json:"Accelerated,omitempty"`
+	AcceleratedPullZoneID int64   `json:"AcceleratedPullZoneId,omitempty"`
+	PullZoneID            int64   `json:"PullZoneId,omitempty"`
+	ScriptID              int64   `json:"ScriptId,omitempty"`
+	MonitorType           int     `json:"MonitorType,omitempty"`
+	MonitorStatus         int     `json:"MonitorStatus,omitempty"`
+	GeolocationLatitude   float64 `json:"GeolocationLatitude,omitempty"`
+	GeolocationLongitude  float64 `json:"GeolocationLongitude,omitempty"`
+	LatencyZone           string  `json:"LatencyZone,omitempty"`
+	SmartRoutingType      int     `json:"SmartRoutingType,omitempty"`
+	// "Enviromental" [sic] is how the Bunny API spells it on the wire.
+	EnviromentalVariables []bunnyEnvVar `json:"EnviromentalVariables,omitempty"`
+}
+
+type bunnyEnvVar struct {
+	Name  string `json:"Name"`
+	Value string `json:"Value"`
+}
+
+// hasBunnyFields reports whether the record carries Bunny-specific data that
+// the generic libdns record types cannot represent.
+func (r bunnyRecord) hasBunnyFields() bool {
+	return r.Disabled || r.Accelerated || r.AcceleratedPullZoneID != 0 ||
+		r.PullZoneID != 0 || r.ScriptID != 0 ||
+		r.MonitorType != 0 || r.MonitorStatus != 0 ||
+		r.GeolocationLatitude != 0 || r.GeolocationLongitude != 0 ||
+		r.LatencyZone != "" || r.SmartRoutingType != 0 ||
+		len(r.EnviromentalVariables) > 0
 }
 
 // apiURL returns the base URL of the Bunny API. It can be overridden in
@@ -501,11 +532,76 @@ func (zone bunnyZone) bunnyRecord(record libdns.Record) (bunnyRecord, error) {
 	case libdns.ServiceBinding:
 		r.Priority = int32(rec.Priority)
 		r.Value = fmt.Sprintf("%s %s", rec.Target, rec.Params)
+	case Record:
+		r.Disabled = rec.Disabled
+		r.Accelerated = rec.Accelerated
+		r.AcceleratedPullZoneID = rec.AcceleratedPullZoneID
+		r.PullZoneID = rec.PullZoneID
+		r.ScriptID = rec.ScriptID
+		r.MonitorType = rec.MonitorType
+		r.GeolocationLatitude = rec.GeolocationLatitude
+		r.GeolocationLongitude = rec.GeolocationLongitude
+		r.LatencyZone = rec.LatencyZone
+		r.SmartRoutingType = rec.SmartRoutingType
+		r.EnviromentalVariables = toBunnyEnvVars(rec.EnvironmentalVariables)
 	}
 	return r, nil
 }
 
+func toBunnyEnvVars(vars map[string]string) []bunnyEnvVar {
+	if len(vars) == 0 {
+		return nil
+	}
+	wire := make([]bunnyEnvVar, 0, len(vars))
+	for _, name := range slices.Sorted(maps.Keys(vars)) {
+		wire = append(wire, bunnyEnvVar{Name: name, Value: vars[name]})
+	}
+	return wire
+}
+
+func fromBunnyEnvVars(vars []bunnyEnvVar) map[string]string {
+	if len(vars) == 0 {
+		return nil
+	}
+	result := make(map[string]string, len(vars))
+	for _, v := range vars {
+		result[v.Name] = v.Value
+	}
+	return result
+}
+
 func (zone bunnyZone) libdnsRecord(record bunnyRecord) (libdns.Record, error) {
+	base, err := zone.libdnsBaseRecord(record)
+	if err != nil || !record.hasBunnyFields() {
+		return base, err
+	}
+
+	// The record carries Bunny-specific data the generic libdns types cannot
+	// hold, so return it as a Record instead.
+	rr := base.RR()
+	return Record{
+		Name:                   rr.Name,
+		TTL:                    rr.TTL,
+		Type:                   rr.Type,
+		Data:                   rr.Data,
+		Disabled:               record.Disabled,
+		Accelerated:            record.Accelerated,
+		AcceleratedPullZoneID:  record.AcceleratedPullZoneID,
+		PullZoneID:             record.PullZoneID,
+		ScriptID:               record.ScriptID,
+		MonitorType:            record.MonitorType,
+		MonitorStatus:          record.MonitorStatus,
+		GeolocationLatitude:    record.GeolocationLatitude,
+		GeolocationLongitude:   record.GeolocationLongitude,
+		LatencyZone:            record.LatencyZone,
+		SmartRoutingType:       record.SmartRoutingType,
+		EnvironmentalVariables: fromBunnyEnvVars(record.EnviromentalVariables),
+	}, nil
+}
+
+// libdnsBaseRecord converts the wire format to the most specific generic
+// libdns record type.
+func (zone bunnyZone) libdnsBaseRecord(record bunnyRecord) (libdns.Record, error) {
 	rType, err := fromBunnyType(record.Type)
 	if err != nil {
 		return nil, err
