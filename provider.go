@@ -17,6 +17,9 @@ type Provider struct {
 
 	zones   map[string]bunnyZone `json:"-"`
 	zonesMu sync.Mutex
+
+	// apiBase overrides the API base URL in tests.
+	apiBase string
 }
 
 // GetRecords lists all the records in the zone.
