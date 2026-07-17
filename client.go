@@ -24,10 +24,39 @@ type getAllZonesResponse struct {
 }
 
 type bunnyZone struct {
-	ID            int    `json:"Id"`
-	Domain        string `json:"Domain"`
-	DnsSecEnabled bool   `json:"DnsSecEnabled"`
-	nameBase      string `json:"-"`
+	ID                            int    `json:"Id"`
+	Domain                        string `json:"Domain"`
+	DnsSecEnabled                 bool   `json:"DnsSecEnabled"`
+	NameserversDetected           bool   `json:"NameserversDetected"`
+	CustomNameserversEnabled      bool   `json:"CustomNameserversEnabled"`
+	Nameserver1                   string `json:"Nameserver1"`
+	Nameserver2                   string `json:"Nameserver2"`
+	SoaEmail                      string `json:"SoaEmail"`
+	LoggingEnabled                bool   `json:"LoggingEnabled"`
+	LoggingIPAnonymizationEnabled bool   `json:"LoggingIPAnonymizationEnabled"`
+	LogAnonymizationType          int    `json:"LogAnonymizationType"`
+	DateCreated                   string `json:"DateCreated"`
+	DateModified                  string `json:"DateModified"`
+	nameBase                      string `json:"-"`
+}
+
+// zone converts the wire format to the exported Zone type.
+func (z bunnyZone) zone() Zone {
+	return Zone{
+		ID:                            int64(z.ID),
+		Domain:                        z.Domain,
+		DNSSECEnabled:                 z.DnsSecEnabled,
+		NameserversDetected:           z.NameserversDetected,
+		CustomNameserversEnabled:      z.CustomNameserversEnabled,
+		Nameserver1:                   z.Nameserver1,
+		Nameserver2:                   z.Nameserver2,
+		SoaEmail:                      z.SoaEmail,
+		LoggingEnabled:                z.LoggingEnabled,
+		LoggingIPAnonymizationEnabled: z.LoggingIPAnonymizationEnabled,
+		LogAnonymizationType:          z.LogAnonymizationType,
+		DateCreated:                   z.DateCreated,
+		DateModified:                  z.DateModified,
+	}
 }
 
 type bunnyRecord struct {
