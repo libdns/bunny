@@ -52,6 +52,31 @@ func main() {
 
 ```
 
+## Zone management
+
+Beyond the standard libdns interfaces, `*bunny.Provider` exposes the full Bunny.net DNS zone API: `GetZone`, `CreateZone`, `UpdateZone`, `DeleteZone`, `CheckZoneAvailability`, `ExportZone`, `ImportZone` and `GetZoneStatistics`.
+
+```go
+available, err := provider.CheckZoneAvailability(ctx, "example.com")
+if err != nil || !available {
+	return err
+}
+
+zone, err := provider.CreateZone(ctx, "example.com")
+if err != nil {
+	return err
+}
+fmt.Printf("created zone %d, nameservers %s / %s\n", zone.ID, zone.Nameserver1, zone.Nameserver2)
+
+// Import records from a BIND zone file, then export them again.
+result, err := provider.ImportZone(ctx, "example.com", zoneFileBytes)
+zoneFile, err := provider.ExportZone(ctx, "example.com")
+
+// Update zone settings; nil fields are left unchanged.
+soa := "hostmaster@example.com"
+zone, err = provider.UpdateZone(ctx, "example.com", bunny.ZoneUpdate{SoaEmail: &soa})
+```
+
 ## DNSSEC
 
 Bunny.net manages DNSSEC keys and signs zones automatically:
