@@ -52,6 +52,22 @@ func main() {
 
 ```
 
+## DNSSEC
+
+Bunny.net manages DNSSEC keys and signs zones automatically:
+
+```go
+info, err := provider.EnableDNSSEC(ctx, "example.com")
+if err != nil {
+	return err
+}
+if !info.DSConfigured {
+	fmt.Printf("publish this DS record at your registrar: %s\n", info.DSRecord)
+}
+```
+
+**Bunny.net does not publish the DS record at your domain's registrar.** Until you add the returned DS record at the registrar (or parent zone) yourself, DNSSEC validation is not active. Likewise, remove the DS record at the registrar *before* calling `DisableDNSSEC`, or validating resolvers will fail to resolve the zone.
+
 ## Debugging
 
 You can enable logging by configuring a custom logger or by setting `Debug` to true.
