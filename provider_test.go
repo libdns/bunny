@@ -155,18 +155,23 @@ func TestMain(m *testing.M) {
 	envAccessKey = os.Getenv("BUNNY_TEST_API_KEY")
 	envZone = os.Getenv("BUNNY_TEST_ZONE")
 
-	if len(envAccessKey) == 0 || len(envZone) == 0 {
-		fmt.Println(`Please notice that this test runs agains the public Bunny.net API, so you sould
-never run the test with a zone, used in production.
-To run this test, you have to specify 'BUNNY_TEST_API_KEY' and 'BUNNY_TEST_ZONE'.
-Example: "BUNNY_TEST_API_KEY="123" BUNNY_TEST_ZONE="my-domain.com" go test ./... -v`)
-		os.Exit(1)
-	}
-
 	os.Exit(m.Run())
 }
 
+// skipWithoutLiveAPI skips tests that run against the live Bunny.net API
+// unless credentials are configured. Never use a zone that is in production!
+func skipWithoutLiveAPI(t *testing.T) {
+	if len(envAccessKey) == 0 || len(envZone) == 0 {
+		t.Skip(`live API test; to run it, specify 'BUNNY_TEST_API_KEY' and 'BUNNY_TEST_ZONE'.
+Please notice that this test runs against the public Bunny.net API, so you should
+never run the test with a zone used in production.
+Example: BUNNY_TEST_API_KEY="123" BUNNY_TEST_ZONE="my-domain.com" go test ./... -v`)
+	}
+}
+
 func Test_AppendRecords(t *testing.T) {
+	skipWithoutLiveAPI(t)
+
 	p := &bunny.Provider{
 		AccessKey: envAccessKey,
 		Debug:     true,
@@ -215,6 +220,8 @@ func Test_AppendRecords(t *testing.T) {
 }
 
 func Test_DeleteRecords(t *testing.T) {
+	skipWithoutLiveAPI(t)
+
 	p := &bunny.Provider{
 		AccessKey: envAccessKey,
 		Debug:     true,
@@ -263,6 +270,8 @@ func Test_DeleteRecords(t *testing.T) {
 }
 
 func Test_GetRecords(t *testing.T) {
+	skipWithoutLiveAPI(t)
+
 	p := &bunny.Provider{
 		AccessKey: envAccessKey,
 		Debug:     true,
@@ -292,6 +301,8 @@ func Test_GetRecords(t *testing.T) {
 }
 
 func Test_SetRecords(t *testing.T) {
+	skipWithoutLiveAPI(t)
+
 	p := &bunny.Provider{
 		AccessKey: envAccessKey,
 		Debug:     true,
@@ -349,6 +360,8 @@ func Test_SetRecords(t *testing.T) {
 }
 
 func Test_NestedRecords(t *testing.T) {
+	skipWithoutLiveAPI(t)
+
 	p := &bunny.Provider{
 		AccessKey: envAccessKey,
 		Debug:     true,
@@ -431,6 +444,8 @@ func Test_NestedRecords(t *testing.T) {
 }
 
 func Test_ListZones(t *testing.T) {
+	skipWithoutLiveAPI(t)
+
 	p := &bunny.Provider{
 		AccessKey: envAccessKey,
 		Debug:     true,
@@ -453,6 +468,8 @@ func Test_ListZones(t *testing.T) {
 }
 
 func Test_RoundRobin(t *testing.T) {
+	skipWithoutLiveAPI(t)
+
 	p := &bunny.Provider{
 		AccessKey: envAccessKey,
 		Debug:     true,
